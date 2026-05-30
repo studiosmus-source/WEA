@@ -82,19 +82,17 @@ public class WidgetRenderer {
         }
         addSceneEffects(base, rawPhoto != null, w, h, horizonY, time, atmo, hourSeed, now);
 
-        Bitmap distorted = applyGlassDistortion(base, w, h);
-        // base kept alive: used as clean scene source for lens-drop sampling
-
-        Canvas canvas = new Canvas(distorted);
-        drawGlassSurface(canvas, w, h);
+        // No glass distortion or surface effects — clean crisp photo.
+        // Copy base before drawing so lens drops can sample the untouched scene.
+        Bitmap sceneSrc = base.copy(Bitmap.Config.ARGB_8888, false);
+        Canvas canvas = new Canvas(base);
 
         if (atmo.rain > 0.1f) {
-            drawRainOnGlass(canvas, base, w, h, now, hourSeed, atmo);
+            drawRainOnGlass(canvas, sceneSrc, w, h, now, hourSeed, atmo);
         }
+        sceneSrc.recycle();
 
-        base.recycle();
-
-        // Lightning flash for storms — a brief bright veil, ~every 36 s
+        // Lightning flash for storms — brief bright veil, ~every 36 s
         if (atmo.rain > 0.85f) {
             long lightPeriod = 28000L + (hourSeed % 9) * 3500L;
             long lPhase = now % lightPeriod;
@@ -107,7 +105,7 @@ public class WidgetRenderer {
         }
 
         drawTimeDate(canvas, w, h);
-        return distorted;
+        return base;
     }
 
     // ─── Time of day ─────────────────────────────────────────────────────────
@@ -929,16 +927,17 @@ public class WidgetRenderer {
 
     private static void drawLensDrop(Canvas c, Bitmap src,
                                       float cx, float cy, float r, float alpha) {
-        // Teardrop clip shape
+        // Teardrop: wider at bottom (gravity), narrow at top
+        RectF oval = new RectF(cx - r * 0.65f, cy - r * 0.95f,
+                               cx + r * 0.65f, cy + r * 0.65f);
         Path shape = new Path();
-        shape.addOval(cx - r * 0.68f, cy - r * 0.92f,
-                      cx + r * 0.68f, cy + r * 0.58f, Path.Direction.CW);
+        shape.addOval(oval, Path.Direction.CW);
 
         c.save();
         c.clipPath(shape);
 
-        // Sample scene around drop center; smaller margin = more magnification
-        float margin = Math.max(r * 0.52f, 6f);
+        // Sample scene — small margin = magnification effect
+        float margin = Math.max(r * 0.50f, 6f);
         int sx = (int) Math.max(0, cx - margin);
         int sy = (int) Math.max(0, cy - margin);
         int sw = (int) Math.min(src.getWidth()  - sx, (int)(margin * 2));
@@ -946,47 +945,45 @@ public class WidgetRenderer {
 
         if (sw > 2 && sh > 2) {
             Bitmap sub = Bitmap.createBitmap(src, sx, sy, sw, sh);
-            // Scale to drop width; negative Y = vertical flip (lens inversion)
-            float sc = (r * 1.36f) / Math.max(sw, 1);
+            float sc = (r * 1.30f) / Math.max(sw, 1);
             Matrix mat = new Matrix();
-            mat.setScale(sc, -sc);
+            mat.setScale(sc, -sc);             // negative Y = lens inversion
             mat.postTranslate(cx - sw * sc * 0.5f, cy + sh * sc * 0.5f);
             Paint bp = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-            bp.setAlpha((int) Math.min(255f, alpha * 1.12f));
+            bp.setAlpha((int) Math.min(255f, alpha));
             c.drawBitmap(sub, mat, bp);
             sub.recycle();
         }
 
         c.restore();
 
-        // Subtle water-blue tint over the scene inside the drop
         Paint ov = new Paint(Paint.ANTI_ALIAS_FLAG);
-        ov.setColor(Color.argb((int)(alpha * 0.17f), 78, 122, 195));
-        c.drawOval(cx - r * 0.68f, cy - r * 0.92f,
-                   cx + r * 0.68f, cy + r * 0.58f, ov);
 
-        // Rim (thin edge of water bead)
+        // Subtle water-blue tint
+        ov.setColor(Color.argb((int)(alpha * 0.14f), 70, 115, 195));
+        c.drawOval(oval, ov);
+
+        // Dark rim — refractive index boundary, the most realistic touch
         ov.setStyle(Paint.Style.STROKE);
-        ov.setStrokeWidth(0.9f);
-        ov.setColor(Color.argb((int)(alpha * 0.28f), 128, 168, 222));
-        c.drawOval(cx - r * 0.68f, cy - r * 0.92f,
-                   cx + r * 0.68f, cy + r * 0.58f, ov);
+        ov.setStrokeWidth(Math.max(1.2f, r * 0.06f));
+        ov.setColor(Color.argb((int)(alpha * 0.55f), 18, 25, 45));
+        c.drawOval(oval, ov);
         ov.setStyle(Paint.Style.FILL);
 
-        // Primary specular — bright ellipse, upper-left (light from above-right)
-        ov.setColor(Color.argb((int) Math.min(255f, alpha * 0.88f), 255, 255, 255));
-        c.drawOval(cx - r * 0.42f, cy - r * 0.82f,
-                   cx - r * 0.02f, cy - r * 0.30f, ov);
+        // Primary specular — large bright ellipse, upper-left
+        ov.setColor(Color.argb((int) Math.min(255f, alpha * 0.95f), 255, 255, 255));
+        c.drawOval(cx - r * 0.45f, cy - r * 0.85f,
+                   cx + r * 0.05f, cy - r * 0.22f, ov);
 
-        // Secondary specular — smaller, upper-right
-        ov.setColor(Color.argb((int) Math.min(255f, alpha * 0.36f), 255, 255, 255));
-        c.drawOval(cx + r * 0.08f, cy - r * 0.66f,
-                   cx + r * 0.30f, cy - r * 0.36f, ov);
+        // Secondary specular — small, upper-right
+        ov.setColor(Color.argb((int) Math.min(255f, alpha * 0.45f), 255, 255, 255));
+        c.drawOval(cx + r * 0.10f, cy - r * 0.68f,
+                   cx + r * 0.34f, cy - r * 0.38f, ov);
 
-        // Drop shadow beneath (very subtle darkening)
-        ov.setColor(Color.argb((int)(alpha * 0.13f), 0, 4, 22));
-        c.drawOval(cx - r * 0.55f, cy + r * 0.28f,
-                   cx + r * 0.55f, cy + r * 0.62f, ov);
+        // Shadow cast below the drop
+        ov.setColor(Color.argb((int)(alpha * 0.18f), 0, 4, 22));
+        c.drawOval(cx - r * 0.52f, cy + r * 0.48f,
+                   cx + r * 0.52f, cy + r * 0.72f, ov);
     }
 
     // Computes smooth continuous y-position for a glass drop.
