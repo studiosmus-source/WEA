@@ -1,9 +1,13 @@
 package com.studiosmus.wea;
 
 import android.content.Context;
+import android.content.res.Resources;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.ColorMatrix;
+import android.graphics.ColorMatrixColorFilter;
 import android.graphics.LinearGradient;
 import android.graphics.Matrix;
 import android.graphics.Paint;
@@ -17,6 +21,11 @@ import java.util.Calendar;
 import java.util.Random;
 
 public class WidgetRenderer {
+
+    // ─── Photo cache (avoid reloading the JPEG every 2 s) ────────────────────
+    private static Bitmap sCachedPhoto = null;
+    private static int    sCachedW     = -1;
+    private static int    sCachedH     = -1;
 
     public enum TimeOfDay {
         DAWN, MORNING, NOON, AFTERNOON, SUNSET, DUSK, NIGHT
@@ -60,8 +69,18 @@ public class WidgetRenderer {
         long hourSeed = now / (3600L * 1000);
         float horizonY = h * 0.45f;
 
-        Bitmap base = generateSeaSky(w, h, horizonY, time, atmo, timeSeed);
-        addSceneEffects(base, w, h, horizonY, time, atmo, hourSeed, now);
+        // ── Background: real photo if available, procedural fallback ─────────
+        Bitmap rawPhoto = loadScaledPhoto(ctx, w, h);
+        Bitmap base;
+        if (rawPhoto != null) {
+            base = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+            Paint cp = new Paint();
+            cp.setColorFilter(new ColorMatrixColorFilter(buildColorMatrix(time, atmo)));
+            new Canvas(base).drawBitmap(rawPhoto, 0, 0, cp);
+        } else {
+            base = generateSeaSky(w, h, horizonY, time, atmo, timeSeed);
+        }
+        addSceneEffects(base, rawPhoto != null, w, h, horizonY, time, atmo, hourSeed, now);
 
         Bitmap distorted = applyGlassDistortion(base, w, h);
         // base kept alive: used as clean scene source for lens-drop sampling
@@ -106,7 +125,106 @@ public class WidgetRenderer {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    //  BACKGROUND
+    //  PHOTO BACKGROUND
+    // ═══════════════════════════════════════════════════════════════════════
+
+    private static Bitmap loadScaledPhoto(Context ctx, int w, int h) {
+        if (sCachedPhoto != null && sCachedW == w && sCachedH == h) return sCachedPhoto;
+        Resources res = ctx.getResources();
+        int id = res.getIdentifier("porto_venere", "drawable", ctx.getPackageName());
+        if (id == 0) return null;
+
+        BitmapFactory.Options opts = new BitmapFactory.Options();
+        opts.inJustDecodeBounds = true;
+        BitmapFactory.decodeResource(res, id, opts);
+        int iw = opts.outWidth, ih = opts.outHeight;
+        int sample = 1;
+        while (iw / sample > w * 2 && ih / sample > h * 2) sample *= 2;
+        opts.inJustDecodeBounds = false;
+        opts.inSampleSize = sample;
+        Bitmap raw = BitmapFactory.decodeResource(res, id, opts);
+        if (raw == null) return null;
+
+        // Centre-crop to widget aspect ratio
+        Bitmap scaled = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        float sc = Math.max((float) w / raw.getWidth(), (float) h / raw.getHeight());
+        float sw = raw.getWidth() * sc, sh = raw.getHeight() * sc;
+        Matrix m = new Matrix();
+        m.setScale(sc, sc);
+        m.postTranslate((w - sw) / 2f, (h - sh) / 2f);
+        new Canvas(scaled).drawBitmap(raw, m, new Paint(Paint.FILTER_BITMAP_FLAG));
+        raw.recycle();
+
+        if (sCachedPhoto != null) sCachedPhoto.recycle();
+        sCachedPhoto = scaled;
+        sCachedW = w; sCachedH = h;
+        return scaled;
+    }
+
+    // 5×4 colour matrix: time-of-day grading + weather desaturation/darkening.
+    private static float[] buildColorMatrix(TimeOfDay time, Atmo atmo) {
+        float[] m;
+        switch (time) {
+            case DAWN:
+                m = new float[]{
+                    0.50f,0.14f,0.02f,0,18,   // warm orange, dim
+                    0.04f,0.34f,0.02f,0, 4,
+                    0.00f,0.02f,0.18f,0, 0,
+                    0,0,0,1,0}; break;
+            case MORNING:
+                m = new float[]{
+                    0.90f,0.07f,0.00f,0,10,   // cool, slightly warm
+                    0.00f,0.90f,0.04f,0, 6,
+                    0.00f,0.04f,0.96f,0, 0,
+                    0,0,0,1,0}; break;
+            case NOON:
+                m = new float[]{
+                    1.00f,0.00f,0.00f,0, 0,   // natural
+                    0.00f,1.00f,0.00f,0, 4,
+                    0.00f,0.04f,0.98f,0, 8,
+                    0,0,0,1,0}; break;
+            case AFTERNOON:
+                m = new float[]{
+                    1.06f,0.05f,0.00f,0,10,   // warm afternoon light
+                    0.00f,0.96f,0.00f,0, 2,
+                    0.00f,0.00f,0.86f,0, 0,
+                    0,0,0,1,0}; break;
+            case SUNSET:
+                m = new float[]{
+                    0.88f,0.20f,0.02f,0,24,   // deep amber-red
+                    0.00f,0.60f,0.05f,0, 8,
+                    0.00f,0.02f,0.30f,0, 0,
+                    0,0,0,1,0}; break;
+            case DUSK:
+                m = new float[]{
+                    0.18f,0.05f,0.08f,0, 4,   // purple-blue, dark
+                    0.00f,0.16f,0.08f,0, 2,
+                    0.04f,0.08f,0.44f,0, 0,
+                    0,0,0,1,0}; break;
+            default: // NIGHT
+                m = new float[]{
+                    0.04f,0.01f,0.02f,0, 0,
+                    0.01f,0.04f,0.02f,0, 0,
+                    0.02f,0.03f,0.12f,0, 3,
+                    0,0,0,1,0}; break;
+        }
+        // Weather: desaturate for clouds, darken for rain
+        ColorMatrix cm = new ColorMatrix(m);
+        if (atmo.cloud > 0.08f) {
+            ColorMatrix ds = new ColorMatrix();
+            ds.setSaturation(1f - atmo.cloud * 0.62f);
+            cm.postConcat(ds);
+        }
+        if (atmo.rain > 0.08f) {
+            float d = 1f - atmo.rain * 0.35f;
+            cm.postConcat(new ColorMatrix(new float[]{
+                d,0,0,0,0,  0,d,0,0,0,  0,0,d,0,0,  0,0,0,1,0}));
+        }
+        return cm.getArray();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  PROCEDURAL BACKGROUND (fallback when photo unavailable)
     // ═══════════════════════════════════════════════════════════════════════
 
     private static Bitmap generateSeaSky(int w, int h, float horizonY,
@@ -369,25 +487,25 @@ public class WidgetRenderer {
         if (mistStr < 0.06f) return;
 
         // Horizon fog band — reduces visibility at sea level
-        float bandH = h * (0.04f + atmo.fog * 0.10f + atmo.rain * 0.06f);
+        float bandH = h * (0.06f + atmo.fog * 0.12f + atmo.rain * 0.08f);
         Paint mp = new Paint();
-        mp.setShader(new LinearGradient(0, horizonY - bandH, 0, horizonY + bandH * 1.6f,
+        mp.setShader(new LinearGradient(0, horizonY - bandH, 0, horizonY + bandH * 1.8f,
                 Color.TRANSPARENT,
-                Color.argb((int)(mistStr * 98), 172, 188, 212),
+                Color.argb((int)(mistStr * 155), 168, 185, 210),
                 Shader.TileMode.CLAMP));
-        c.drawRect(0, horizonY - bandH, w, horizonY + bandH * 1.6f, mp);
+        c.drawRect(0, horizonY - bandH, w, horizonY + bandH * 1.8f, mp);
         mp.setShader(null);
 
-        // Overall rain veil — grey desaturation of scene
-        if (atmo.rain > 0.32f) {
-            mp.setColor(Color.argb((int)(atmo.rain * 34), 162, 174, 196));
+        // Overall rain veil — visible grey tone over whole scene
+        if (atmo.rain > 0.25f) {
+            mp.setColor(Color.argb((int)(atmo.rain * 88), 158, 172, 195));
             c.drawRect(0, 0, w, h, mp);
         }
 
         // Upper sky — dense rain obscures distant view
-        if (atmo.rain > 0.52f) {
+        if (atmo.rain > 0.45f) {
             mp.setShader(new LinearGradient(0, 0, 0, horizonY,
-                    Color.argb((int)(atmo.rain * 45), 158, 174, 200),
+                    Color.argb((int)(atmo.rain * 115), 155, 172, 198),
                     Color.TRANSPARENT,
                     Shader.TileMode.CLAMP));
             c.drawRect(0, 0, w, horizonY, mp);
@@ -422,15 +540,19 @@ public class WidgetRenderer {
     //  SCENE EFFECTS
     // ═══════════════════════════════════════════════════════════════════════
 
-    private static void addSceneEffects(Bitmap bmp, int w, int h, float horizonY,
+    private static void addSceneEffects(Bitmap bmp, boolean hasPhoto,
+                                         int w, int h, float horizonY,
                                          TimeOfDay time, Atmo atmo,
                                          long hourSeed, long now) {
         Canvas c = new Canvas(bmp);
         boolean isDay = time != TimeOfDay.NIGHT && time != TimeOfDay.DUSK;
 
-        drawRockyCliff(c, w, h, horizonY, time, atmo);
-        if (atmo.cloud < 0.8f && isDay) {
-            drawSmallBoats(c, w, horizonY, time);
+        // Photo already contains cliff and boats — only draw procedural ones as fallback
+        if (!hasPhoto) {
+            drawRockyCliff(c, w, h, horizonY, time, atmo);
+            if (atmo.cloud < 0.8f && isDay) {
+                drawSmallBoats(c, w, horizonY, time);
+            }
         }
         if (atmo.rain > 0.1f) {
             drawRainMist(c, w, h, horizonY, atmo, now);
@@ -695,9 +817,9 @@ public class WidgetRenderer {
 
     private static void drawRainOnGlass(Canvas c, Bitmap src, int w, int h,
                                          long now, long hourSeed, Atmo atmo) {
-        // Overall wet-glass tint
+        // Overall wet-glass tint — noticeably visible even at rain=0.5
         Paint wt = new Paint();
-        wt.setColor(Color.argb((int)(16 * atmo.rain), 68, 100, 148));
+        wt.setColor(Color.argb((int)(58 * atmo.rain), 65, 98, 148));
         c.drawRect(0, 0, w, h, wt);
 
         float dx = (float) Math.tan(Math.toRadians(atmo.windAngle * 0.45));
@@ -706,32 +828,32 @@ public class WidgetRenderer {
         Random far = new Random(hourSeed * 7 + 1);
         Paint fp = new Paint(Paint.ANTI_ALIAS_FLAG);
         fp.setStyle(Paint.Style.STROKE); fp.setStrokeCap(Paint.Cap.ROUND);
-        fp.setStrokeWidth(0.5f);
-        for (int i = 0; i < 44; i++) {
+        fp.setStrokeWidth(0.6f);
+        for (int i = 0; i < 60; i++) {
             float startY = far.nextFloat() * h;
             float x      = far.nextFloat() * w;
-            float len    = (8 + far.nextFloat() * 38) * (h / 400f);
+            float len    = (10 + far.nextFloat() * 42) * (h / 400f);
             float speed  = 38f + far.nextFloat() * 55f;
             float phase  = far.nextFloat();
             float y = slideY(startY, speed, phase, 9000L, now, h);
             float fadeIn = Math.min(1f, y / (h * 0.12f));
-            int alpha = (int)(17 * atmo.rain * fadeIn);
+            int alpha = (int)(52 * atmo.rain * fadeIn);
             fp.setColor(Color.argb(alpha, 175, 210, 255));
             c.drawLine(x, y, x + dx * len, y + len, fp);
         }
 
         // ── Medium streaks ────────────────────────────────────────────────────
         Random med = new Random(hourSeed * 13 + 2);
-        fp.setStrokeWidth(0.95f);
-        for (int i = 0; i < 24; i++) {
+        fp.setStrokeWidth(1.2f);
+        for (int i = 0; i < 35; i++) {
             float startY = med.nextFloat() * h;
             float x      = med.nextFloat() * w;
-            float len    = (24 + med.nextFloat() * 72) * (h / 400f);
+            float len    = (28 + med.nextFloat() * 80) * (h / 400f);
             float speed  = 60f + med.nextFloat() * 78f;
             float phase  = med.nextFloat();
             float y = slideY(startY, speed, phase, 7000L, now, h);
             float fadeIn = Math.min(1f, y / (h * 0.09f));
-            int alpha = (int)(28 * atmo.rain * fadeIn);
+            int alpha = (int)(88 * atmo.rain * fadeIn);
             fp.setColor(Color.argb(alpha, 158, 202, 250));
             c.drawLine(x, y, x + dx * len, y + len, fp);
         }
@@ -741,29 +863,29 @@ public class WidgetRenderer {
 
         // ── Large lens drops (scene visible inverted inside each drop) ─────────
         Random near = new Random(hourSeed * 19 + 3);
-        int numDrops = (int)(5 + atmo.rain * 13);
+        int numDrops = (int)(8 + atmo.rain * 18);
         for (int i = 0; i < numDrops; i++) {
             float startY = near.nextFloat() * h;
             float x      = near.nextFloat() * w;
-            float r      = (3.5f + near.nextFloat() * 8.5f) * (w / 240f);
+            float r      = (5f + near.nextFloat() * 11f) * (w / 240f);
             float speed  = 11f + near.nextFloat() * 28f;
             float phase  = near.nextFloat();
             float y = slideY(startY, speed, phase, 15000L, now, h);
             float fadeIn = (float) Math.sin(Math.min(1f, y / (float) h) * Math.PI);
             if (fadeIn < 0.06f) continue;
-            float dropAlpha = Math.min(255f, 215f * atmo.rain * Math.max(0.12f, fadeIn));
+            float dropAlpha = Math.min(255f, 255f * atmo.rain * Math.max(0.15f, fadeIn));
             drawLensDrop(c, src, x, y, r, dropAlpha);
         }
 
         // ── Condensation haze at bottom edge ──────────────────────────────────
-        if (atmo.rain > 0.22f) {
-            float condH = h * (0.05f + atmo.rain * 0.09f);
+        if (atmo.rain > 0.18f) {
+            float condH = h * (0.07f + atmo.rain * 0.12f);
             Paint cp = new Paint();
-            cp.setShader(new LinearGradient(0, h - condH * 1.6f, 0, h,
+            cp.setShader(new LinearGradient(0, h - condH * 1.8f, 0, h,
                     Color.argb(0, 200, 218, 240),
-                    Color.argb((int)(atmo.rain * 82), 195, 215, 240),
+                    Color.argb((int)(atmo.rain * 140), 195, 215, 240),
                     Shader.TileMode.CLAMP));
-            c.drawRect(0, h - condH * 1.6f, w, h, cp);
+            c.drawRect(0, h - condH * 1.8f, w, h, cp);
             cp.setShader(null);
         }
     }
@@ -802,22 +924,22 @@ public class WidgetRenderer {
             }
 
             // Outer stream (wider, translucent)
-            rp.setStrokeWidth(baseW * 2.0f);
-            rp.setColor(Color.argb((int)(24 * atmo.rain), 145, 188, 238));
+            rp.setStrokeWidth(baseW * 2.2f);
+            rp.setColor(Color.argb((int)(68 * atmo.rain), 145, 188, 238));
             c.drawPath(trail, rp);
             // Inner highlight (narrower, brighter)
-            rp.setStrokeWidth(baseW * 0.75f);
-            rp.setColor(Color.argb((int)(48 * atmo.rain), 200, 228, 255));
+            rp.setStrokeWidth(baseW * 0.85f);
+            rp.setColor(Color.argb((int)(110 * atmo.rain), 200, 228, 255));
             c.drawPath(trail, rp);
 
             // Leading drop — teardrop bulge at the bottom of the trail
             float dr = baseW * (2.8f + riv.nextFloat() * 1.4f);
             Paint dp = new Paint(Paint.ANTI_ALIAS_FLAG);
             dp.setStyle(Paint.Style.FILL);
-            dp.setColor(Color.argb((int)(58 * atmo.rain), 150, 198, 248));
+            dp.setColor(Color.argb((int)(145 * atmo.rain), 150, 198, 248));
             c.drawOval(x0 - dr * 0.65f, headY, x0 + dr * 0.65f, headY + dr * 1.5f, dp);
             // Specular on leading drop
-            dp.setColor(Color.argb((int)(74 * atmo.rain), 228, 244, 255));
+            dp.setColor(Color.argb((int)(185 * atmo.rain), 228, 244, 255));
             c.drawOval(x0 - dr * 0.32f, headY + dr * 0.08f,
                        x0 + dr * 0.08f, headY + dr * 0.58f, dp);
         }
