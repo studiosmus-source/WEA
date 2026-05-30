@@ -99,8 +99,8 @@ public class SeaWidget extends AppWidgetProvider {
         PendingIntent pi = PendingIntent.getBroadcast(ctx, 0, intent, flags);
         am.setInexactRepeating(
                 AlarmManager.RTC,
-                System.currentTimeMillis() + 5 * 60 * 1000L,
-                5 * 60 * 1000L,
+                System.currentTimeMillis() + 60 * 1000L,
+                60 * 1000L,
                 pi);
     }
 
