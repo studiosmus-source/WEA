@@ -483,34 +483,17 @@ public class WidgetRenderer {
 
     private static void drawRainMist(Canvas c, int w, int h, float horizonY,
                                       Atmo atmo, long now) {
-        float mistStr = atmo.rain * 0.62f + atmo.fog * 0.48f;
-        if (mistStr < 0.06f) return;
-
-        // Horizon fog band — reduces visibility at sea level
-        float bandH = h * (0.06f + atmo.fog * 0.12f + atmo.rain * 0.08f);
+        // Only fog band at horizon — physically correct, no full-scene grey wash
+        float fogStr = atmo.fog * 0.55f + atmo.rain * 0.18f;
+        if (fogStr < 0.04f) return;
+        float bandH = h * (0.04f + atmo.fog * 0.10f + atmo.rain * 0.04f);
         Paint mp = new Paint();
-        mp.setShader(new LinearGradient(0, horizonY - bandH, 0, horizonY + bandH * 1.8f,
+        mp.setShader(new LinearGradient(0, horizonY - bandH, 0, horizonY + bandH * 1.5f,
                 Color.TRANSPARENT,
-                Color.argb((int)(mistStr * 155), 168, 185, 210),
+                Color.argb((int)(fogStr * 110), 172, 188, 215),
                 Shader.TileMode.CLAMP));
-        c.drawRect(0, horizonY - bandH, w, horizonY + bandH * 1.8f, mp);
+        c.drawRect(0, horizonY - bandH, w, horizonY + bandH * 1.5f, mp);
         mp.setShader(null);
-
-        // Overall rain veil — visible grey tone over whole scene
-        if (atmo.rain > 0.25f) {
-            mp.setColor(Color.argb((int)(atmo.rain * 88), 158, 172, 195));
-            c.drawRect(0, 0, w, h, mp);
-        }
-
-        // Upper sky — dense rain obscures distant view
-        if (atmo.rain > 0.45f) {
-            mp.setShader(new LinearGradient(0, 0, 0, horizonY,
-                    Color.argb((int)(atmo.rain * 115), 155, 172, 198),
-                    Color.TRANSPARENT,
-                    Shader.TileMode.CLAMP));
-            c.drawRect(0, 0, w, horizonY, mp);
-            mp.setShader(null);
-        }
     }
 
     private static void drawRainRipples(Canvas c, int w, int h, float horizonY,
@@ -817,63 +800,59 @@ public class WidgetRenderer {
 
     private static void drawRainOnGlass(Canvas c, Bitmap src, int w, int h,
                                          long now, long hourSeed, Atmo atmo) {
-        // Overall wet-glass tint — noticeably visible even at rain=0.5
-        Paint wt = new Paint();
-        wt.setColor(Color.argb((int)(58 * atmo.rain), 65, 98, 148));
-        c.drawRect(0, 0, w, h, wt);
-
         float dx = (float) Math.tan(Math.toRadians(atmo.windAngle * 0.45));
 
         // ── Far thin streaks ──────────────────────────────────────────────────
         Random far = new Random(hourSeed * 7 + 1);
         Paint fp = new Paint(Paint.ANTI_ALIAS_FLAG);
         fp.setStyle(Paint.Style.STROKE); fp.setStrokeCap(Paint.Cap.ROUND);
-        fp.setStrokeWidth(0.6f);
-        for (int i = 0; i < 60; i++) {
+        fp.setStrokeWidth(0.55f);
+        for (int i = 0; i < 40; i++) {
             float startY = far.nextFloat() * h;
             float x      = far.nextFloat() * w;
-            float len    = (10 + far.nextFloat() * 42) * (h / 400f);
+            float len    = (10 + far.nextFloat() * 40) * (h / 400f);
             float speed  = 38f + far.nextFloat() * 55f;
             float phase  = far.nextFloat();
             float y = slideY(startY, speed, phase, 9000L, now, h);
             float fadeIn = Math.min(1f, y / (h * 0.12f));
-            int alpha = (int)(52 * atmo.rain * fadeIn);
-            fp.setColor(Color.argb(alpha, 175, 210, 255));
+            int alpha = (int)(28 * atmo.rain * fadeIn);
+            fp.setColor(Color.argb(alpha, 180, 212, 255));
             c.drawLine(x, y, x + dx * len, y + len, fp);
         }
 
         // ── Medium streaks ────────────────────────────────────────────────────
         Random med = new Random(hourSeed * 13 + 2);
-        fp.setStrokeWidth(1.2f);
-        for (int i = 0; i < 35; i++) {
+        fp.setStrokeWidth(1.1f);
+        for (int i = 0; i < 22; i++) {
             float startY = med.nextFloat() * h;
             float x      = med.nextFloat() * w;
-            float len    = (28 + med.nextFloat() * 80) * (h / 400f);
+            float len    = (28 + med.nextFloat() * 75) * (h / 400f);
             float speed  = 60f + med.nextFloat() * 78f;
             float phase  = med.nextFloat();
             float y = slideY(startY, speed, phase, 7000L, now, h);
             float fadeIn = Math.min(1f, y / (h * 0.09f));
-            int alpha = (int)(88 * atmo.rain * fadeIn);
-            fp.setColor(Color.argb(alpha, 158, 202, 250));
+            int alpha = (int)(50 * atmo.rain * fadeIn);
+            fp.setColor(Color.argb(alpha, 160, 205, 252));
             c.drawLine(x, y, x + dx * len, y + len, fp);
         }
 
         // ── Rivulets (wavy flowing streams on glass surface) ──────────────────
         drawRivulets(c, w, h, now, hourSeed, atmo);
 
-        // ── Large lens drops (scene visible inverted inside each drop) ─────────
+        // ── Lens drops: fewer but big — inverted scene clearly visible ───────
         Random near = new Random(hourSeed * 19 + 3);
-        int numDrops = (int)(8 + atmo.rain * 18);
+        int numDrops = (int)(4 + atmo.rain * 8);
         for (int i = 0; i < numDrops; i++) {
             float startY = near.nextFloat() * h;
             float x      = near.nextFloat() * w;
-            float r      = (5f + near.nextFloat() * 11f) * (w / 240f);
-            float speed  = 11f + near.nextFloat() * 28f;
+            // Large drops — r in range [10..28 px on a 400px-wide widget]
+            float r      = (10f + near.nextFloat() * 18f) * (w / 400f);
+            float speed  = 10f + near.nextFloat() * 24f;
             float phase  = near.nextFloat();
-            float y = slideY(startY, speed, phase, 15000L, now, h);
+            float y = slideY(startY, speed, phase, 16000L, now, h);
             float fadeIn = (float) Math.sin(Math.min(1f, y / (float) h) * Math.PI);
             if (fadeIn < 0.06f) continue;
-            float dropAlpha = Math.min(255f, 255f * atmo.rain * Math.max(0.15f, fadeIn));
+            float dropAlpha = Math.min(255f, 255f * Math.max(0.20f, fadeIn));
             drawLensDrop(c, src, x, y, r, dropAlpha);
         }
 
