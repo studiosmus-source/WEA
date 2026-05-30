@@ -103,5 +103,118 @@
             android:layout_marginTop="16dp"
             android:gravity="center"/>
 
+        <!-- ── Test effetti ──────────────────────────────────────── -->
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#2A3A50"
+            android:layout_marginTop="32dp"
+            android:layout_marginBottom="16dp"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Test effetti meteo"
+            android:textColor="#B0C4DE"
+            android:textSize="12sp"
+            android:layout_marginBottom="8dp"/>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="6dp">
+
+            <Button
+                android:id="@+id/btn_t_clear"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Sereno"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:background="#1A5028"
+                android:padding="10dp"
+                android:layout_marginEnd="4dp"/>
+
+            <Button
+                android:id="@+id/btn_t_cloudy"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Nuvoloso"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:background="#303848"
+                android:padding="10dp"
+                android:layout_marginEnd="4dp"/>
+
+            <Button
+                android:id="@+id/btn_t_windy"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Ventoso"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:background="#284058"
+                android:padding="10dp"/>
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <Button
+                android:id="@+id/btn_t_rainy"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Pioggia"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:background="#1A3060"
+                android:padding="10dp"
+                android:layout_marginEnd="4dp"/>
+
+            <Button
+                android:id="@+id/btn_t_stormy"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Temporale"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:background="#301828"
+                android:padding="10dp"
+                android:layout_marginEnd="4dp"/>
+
+            <Button
+                android:id="@+id/btn_t_reset"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Meteo reale"
+                android:textColor="#CCCCCC"
+                android:textSize="11sp"
+                android:background="#1E2030"
+                android:padding="10dp"/>
+
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/txt_test_mode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="#607890"
+            android:textSize="11sp"
+            android:gravity="center"
+            android:layout_marginBottom="16dp"/>
+
     </LinearLayout>
 </ScrollView>

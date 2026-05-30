@@ -8,10 +8,16 @@ public class WeatherManager {
 
     public enum Condition { CLEAR, CLOUDY, RAINY, STORMY, WINDY }
 
-    private static final long MAX_AGE_MS = 60L * 60 * 1000; // 1 hour
+    private static final long MAX_AGE_MS        = 60L * 60 * 1000; // 1 hour
+    private static final String KEY_OVERRIDE     = "weather_test_override"; // -1 = none
 
     public static Condition getCondition(Context ctx) {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(ctx);
+
+        // Test override takes priority
+        int override = prefs.getInt(KEY_OVERRIDE, -1);
+        if (override >= 0 && override <= 4) return fromIndex(override);
+
         long updated = prefs.getLong("weather_updated", 0);
         if (System.currentTimeMillis() - updated > MAX_AGE_MS) {
             return Condition.CLEAR;
@@ -22,6 +28,21 @@ public class WeatherManager {
         } catch (IllegalArgumentException e) {
             return Condition.CLEAR;
         }
+    }
+
+    public static void setTestOverride(Context ctx, Condition c) {
+        PreferenceManager.getDefaultSharedPreferences(ctx)
+                .edit().putInt(KEY_OVERRIDE, c.ordinal()).apply();
+    }
+
+    public static void clearTestOverride(Context ctx) {
+        PreferenceManager.getDefaultSharedPreferences(ctx)
+                .edit().remove(KEY_OVERRIDE).apply();
+    }
+
+    public static boolean hasTestOverride(Context ctx) {
+        return PreferenceManager.getDefaultSharedPreferences(ctx)
+                .getInt(KEY_OVERRIDE, -1) >= 0;
     }
 
     public static void saveCondition(Context ctx, Condition c) {

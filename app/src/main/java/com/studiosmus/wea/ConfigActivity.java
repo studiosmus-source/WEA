@@ -53,6 +53,45 @@ public class ConfigActivity extends Activity {
             @Override public void onClick(View v) { requestGps(); }
         });
 
+        // ── Test-weather buttons ───────────────────────────────────────────
+        final WeatherManager.Condition[] testConditions = {
+            WeatherManager.Condition.CLEAR,
+            WeatherManager.Condition.CLOUDY,
+            WeatherManager.Condition.WINDY,
+            WeatherManager.Condition.RAINY,
+            WeatherManager.Condition.STORMY,
+        };
+        final int[] testBtnIds = {
+            R.id.btn_t_clear,
+            R.id.btn_t_cloudy,
+            R.id.btn_t_windy,
+            R.id.btn_t_rainy,
+            R.id.btn_t_stormy,
+        };
+        for (int i = 0; i < testBtnIds.length; i++) {
+            final WeatherManager.Condition cond = testConditions[i];
+            ((Button) findViewById(testBtnIds[i])).setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    WeatherManager.setTestOverride(ConfigActivity.this, cond);
+                    SeaWidget.updateAllWidgets(ConfigActivity.this);
+                    setTestLabel("Test attivo: " + cond.name());
+                }
+            });
+        }
+        ((Button) findViewById(R.id.btn_t_reset)).setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                WeatherManager.clearTestOverride(ConfigActivity.this);
+                startService(new Intent(ConfigActivity.this, WeatherUpdateService.class));
+                SeaWidget.updateAllWidgets(ConfigActivity.this);
+                setTestLabel("Meteo reale attivo");
+            }
+        });
+
+        // Show current override on open
+        if (WeatherManager.hasTestOverride(this)) {
+            setTestLabel("Test attivo: " + WeatherManager.getCondition(this).name());
+        }
+
         ((Button) findViewById(R.id.btn_save)).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -131,5 +170,9 @@ public class ConfigActivity extends Activity {
 
     private void setStatus(String msg) {
         ((TextView) findViewById(R.id.txt_status)).setText(msg);
+    }
+
+    private void setTestLabel(String msg) {
+        ((TextView) findViewById(R.id.txt_test_mode)).setText(msg);
     }
 }
