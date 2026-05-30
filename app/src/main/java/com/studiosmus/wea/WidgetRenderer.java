@@ -5,9 +5,11 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RadialGradient;
+import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.Typeface;
 
@@ -62,13 +64,27 @@ public class WidgetRenderer {
         addSceneEffects(base, w, h, horizonY, time, atmo, hourSeed, now);
 
         Bitmap distorted = applyGlassDistortion(base, w, h);
-        base.recycle();
+        // base kept alive: used as clean scene source for lens-drop sampling
 
         Canvas canvas = new Canvas(distorted);
         drawGlassSurface(canvas, w, h);
 
         if (atmo.rain > 0.1f) {
-            drawRainOnGlass(canvas, w, h, now, hourSeed, atmo);
+            drawRainOnGlass(canvas, base, w, h, now, hourSeed, atmo);
+        }
+
+        base.recycle();
+
+        // Lightning flash for storms — a brief bright veil, ~every 36 s
+        if (atmo.rain > 0.85f) {
+            long lightPeriod = 28000L + (hourSeed % 9) * 3500L;
+            long lPhase = now % lightPeriod;
+            if (lPhase < 280L) {
+                float intensity = 1.0f - lPhase / 280f;
+                Paint lp = new Paint();
+                lp.setColor(Color.argb((int)(48 * intensity), 248, 252, 255));
+                canvas.drawRect(0, 0, w, h, lp);
+            }
         }
 
         drawTimeDate(canvas, w, h);
@@ -302,33 +318,80 @@ public class WidgetRenderer {
     }
 
     // ─── Rain in scene ────────────────────────────────────────────────────────
+    // Positions stable via hourSeed; slideY gives smooth continuous motion.
 
     private static void drawRainInScene(Canvas c, int w, int h, float horizonY,
                                          Atmo atmo, long now) {
         float dx = (float) Math.tan(Math.toRadians(atmo.windAngle));
-        Random rnd = new Random(now / 150L);
+        long hourSeed = now / (3600L * 1000);
+        Random rnd = new Random(hourSeed * 97 + 5);
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         p.setStyle(Paint.Style.STROKE);
         p.setStrokeCap(Paint.Cap.ROUND);
 
-        p.setColor(Color.argb((int)(10 * atmo.rain), 160, 180, 215));
-        p.setStrokeWidth(0.4f);
-        int skyN = (int)(12 + atmo.rain * 20);
+        // Sky layer — very fine streaks (far distance)
+        int skyN = (int)(20 + atmo.rain * 32);
         for (int i = 0; i < skyN; i++) {
-            float x = rnd.nextFloat() * w;
-            float y0 = rnd.nextFloat() * horizonY;
-            float ln = (12 + rnd.nextFloat() * 28) * (h / 400f);
-            c.drawLine(x, y0, x+dx*ln, y0+ln, p);
+            float startY = rnd.nextFloat() * horizonY;
+            float x      = rnd.nextFloat() * w;
+            float len    = (10 + rnd.nextFloat() * 28) * (h / 400f);
+            float speed  = 380f + rnd.nextFloat() * 440f;
+            float phase  = rnd.nextFloat();
+            float y = slideY(startY, speed, phase, 750L, now, (int) horizonY);
+            int al = (int)(9 * atmo.rain);
+            p.setStrokeWidth(0.35f);
+            p.setColor(Color.argb(al, 172, 192, 225));
+            c.drawLine(x, y, x + dx * len, y + len, p);
         }
-        p.setColor(Color.argb((int)(16 * atmo.rain), 145, 175, 215));
-        p.setStrokeWidth(0.55f);
-        int seaN = (int)(10 + atmo.rain * 18);
+
+        // Sea layer — perspective-correct: thicker & more alpha near camera
+        int seaN = (int)(16 + atmo.rain * 24);
         for (int i = 0; i < seaN; i++) {
-            float x  = rnd.nextFloat() * w;
-            float y0 = horizonY + rnd.nextFloat() * (h - horizonY);
-            float dist = (y0 - horizonY) / (h - horizonY);
-            float ln = (22 + rnd.nextFloat() * 55) * (0.5f + dist * 0.5f) * (h / 400f);
-            c.drawLine(x, y0, x+dx*ln, y0+ln, p);
+            float startY = rnd.nextFloat() * (h - horizonY);
+            float x      = rnd.nextFloat() * w;
+            float dist   = startY / (h - horizonY);   // 0=horizon, 1=bottom
+            float len    = (18 + rnd.nextFloat() * 52) * (0.35f + dist * 0.65f) * (h / 400f);
+            float speed  = 400f + rnd.nextFloat() * 500f;
+            float phase  = rnd.nextFloat();
+            float y = horizonY + slideY(startY, speed, phase, 680L, now, (int)(h - horizonY));
+            int al = (int)((8 + dist * 20) * atmo.rain);
+            p.setStrokeWidth(0.32f + dist * 0.72f);
+            p.setColor(Color.argb(al, 148, 178, 222));
+            c.drawLine(x, y, x + dx * len, y + len, p);
+        }
+    }
+
+    // ─── Rain / fog atmospheric mist ─────────────────────────────────────────
+
+    private static void drawRainMist(Canvas c, int w, int h, float horizonY,
+                                      Atmo atmo, long now) {
+        float mistStr = atmo.rain * 0.62f + atmo.fog * 0.48f;
+        if (mistStr < 0.06f) return;
+
+        // Horizon fog band — reduces visibility at sea level
+        float bandH = h * (0.04f + atmo.fog * 0.10f + atmo.rain * 0.06f);
+        Paint mp = new Paint();
+        mp.setShader(new LinearGradient(0, horizonY - bandH, 0, horizonY + bandH * 1.6f,
+                Color.TRANSPARENT,
+                Color.argb((int)(mistStr * 98), 172, 188, 212),
+                Shader.TileMode.CLAMP));
+        c.drawRect(0, horizonY - bandH, w, horizonY + bandH * 1.6f, mp);
+        mp.setShader(null);
+
+        // Overall rain veil — grey desaturation of scene
+        if (atmo.rain > 0.32f) {
+            mp.setColor(Color.argb((int)(atmo.rain * 34), 162, 174, 196));
+            c.drawRect(0, 0, w, h, mp);
+        }
+
+        // Upper sky — dense rain obscures distant view
+        if (atmo.rain > 0.52f) {
+            mp.setShader(new LinearGradient(0, 0, 0, horizonY,
+                    Color.argb((int)(atmo.rain * 45), 158, 174, 200),
+                    Color.TRANSPARENT,
+                    Shader.TileMode.CLAMP));
+            c.drawRect(0, 0, w, horizonY, mp);
+            mp.setShader(null);
         }
     }
 
@@ -370,8 +433,11 @@ public class WidgetRenderer {
             drawSmallBoats(c, w, horizonY, time);
         }
         if (atmo.rain > 0.1f) {
+            drawRainMist(c, w, h, horizonY, atmo, now);
             drawRainInScene(c, w, h, horizonY, atmo, now);
             drawRainRipples(c, w, h, horizonY, atmo, now);
+        } else if (atmo.fog > 0.25f) {
+            drawRainMist(c, w, h, horizonY, atmo, now);
         }
         if (atmo.cloud < 0.3f && isDay) {
             drawWaterSparkles(c, w, h, horizonY, hourSeed, now);
@@ -624,76 +690,203 @@ public class WidgetRenderer {
     }
 
     // ─── Rain on glass ────────────────────────────────────────────────────────
-    // Positions fixed by hourSeed so drops don't teleport between renders.
-    // Motion driven by (now % window) so animation is smooth and continuous.
+    // Positions stable via hourSeed; slideY gives smooth continuous motion.
+    // src (pre-distortion scene bitmap) is sampled inside lens drops.
 
-    private static void drawRainOnGlass(Canvas c, int w, int h,
+    private static void drawRainOnGlass(Canvas c, Bitmap src, int w, int h,
                                          long now, long hourSeed, Atmo atmo) {
+        // Overall wet-glass tint
         Paint wt = new Paint();
-        wt.setColor(Color.argb((int)(14 * atmo.rain), 85, 120, 160));
+        wt.setColor(Color.argb((int)(16 * atmo.rain), 68, 100, 148));
         c.drawRect(0, 0, w, h, wt);
 
         float dx = (float) Math.tan(Math.toRadians(atmo.windAngle * 0.45));
 
-        // ── Far layer (38 drops) ──────────────────────────────────────────────
+        // ── Far thin streaks ──────────────────────────────────────────────────
         Random far = new Random(hourSeed * 7 + 1);
         Paint fp = new Paint(Paint.ANTI_ALIAS_FLAG);
         fp.setStyle(Paint.Style.STROKE); fp.setStrokeCap(Paint.Cap.ROUND);
         fp.setStrokeWidth(0.5f);
-        for (int i = 0; i < 38; i++) {
+        for (int i = 0; i < 44; i++) {
             float startY = far.nextFloat() * h;
             float x      = far.nextFloat() * w;
-            float len    = (10 + far.nextFloat() * 45) * (h / 400f);
-            float speed  = 42f + far.nextFloat() * 58f;
+            float len    = (8 + far.nextFloat() * 38) * (h / 400f);
+            float speed  = 38f + far.nextFloat() * 55f;
             float phase  = far.nextFloat();
             float y = slideY(startY, speed, phase, 9000L, now, h);
             float fadeIn = Math.min(1f, y / (h * 0.12f));
-            int alpha = (int)(20 * atmo.rain * fadeIn);
-            fp.setColor(Color.argb(alpha, 170, 210, 255));
-            c.drawLine(x, y, x + dx*len, y+len, fp);
+            int alpha = (int)(17 * atmo.rain * fadeIn);
+            fp.setColor(Color.argb(alpha, 175, 210, 255));
+            c.drawLine(x, y, x + dx * len, y + len, fp);
         }
 
-        // ── Medium layer (20 drops) ───────────────────────────────────────────
+        // ── Medium streaks ────────────────────────────────────────────────────
         Random med = new Random(hourSeed * 13 + 2);
-        fp.setStrokeWidth(0.9f);
-        for (int i = 0; i < 20; i++) {
+        fp.setStrokeWidth(0.95f);
+        for (int i = 0; i < 24; i++) {
             float startY = med.nextFloat() * h;
             float x      = med.nextFloat() * w;
-            float len    = (28 + med.nextFloat() * 80) * (h / 400f);
-            float speed  = 68f + med.nextFloat() * 80f;
+            float len    = (24 + med.nextFloat() * 72) * (h / 400f);
+            float speed  = 60f + med.nextFloat() * 78f;
             float phase  = med.nextFloat();
             float y = slideY(startY, speed, phase, 7000L, now, h);
             float fadeIn = Math.min(1f, y / (h * 0.09f));
-            int alpha = (int)(32 * atmo.rain * fadeIn);
-            fp.setColor(Color.argb(alpha, 155, 200, 250));
-            c.drawLine(x, y, x + dx*len, y+len, fp);
+            int alpha = (int)(28 * atmo.rain * fadeIn);
+            fp.setColor(Color.argb(alpha, 158, 202, 250));
+            c.drawLine(x, y, x + dx * len, y + len, fp);
         }
 
-        // ── Near layer: teardrops (12 drops) ─────────────────────────────────
+        // ── Rivulets (wavy flowing streams on glass surface) ──────────────────
+        drawRivulets(c, w, h, now, hourSeed, atmo);
+
+        // ── Large lens drops (scene visible inverted inside each drop) ─────────
         Random near = new Random(hourSeed * 19 + 3);
-        Paint dp = new Paint(Paint.ANTI_ALIAS_FLAG);
-        for (int i = 0; i < 12; i++) {
+        int numDrops = (int)(5 + atmo.rain * 13);
+        for (int i = 0; i < numDrops; i++) {
             float startY = near.nextFloat() * h;
             float x      = near.nextFloat() * w;
-            float r      = (2.5f + near.nextFloat() * 5f) * (w / 240f);
-            float speed  = 22f + near.nextFloat() * 45f;
+            float r      = (3.5f + near.nextFloat() * 8.5f) * (w / 240f);
+            float speed  = 11f + near.nextFloat() * 28f;
             float phase  = near.nextFloat();
-            float y = slideY(startY, speed, phase, 12000L, now, h);
-            float fadeIn = (float)Math.sin(Math.min(1f, y / h) * Math.PI);
-            int al = (int)(52 * atmo.rain * Math.max(0.1f, fadeIn));
-
-            dp.setStyle(Paint.Style.FILL);
-            dp.setColor(Color.argb(al, 175, 210, 250));
-            c.drawOval(x-r*0.55f, y-r, x+r*0.55f, y+r*0.40f, dp);
-            dp.setColor(Color.argb(Math.min(255, al+28), 255, 255, 255));
-            c.drawOval(x-r*0.28f, y-r*0.80f, x+r*0.05f, y-r*0.22f, dp);
-
-            dp.setStyle(Paint.Style.STROKE);
-            dp.setStrokeWidth(0.7f);
-            dp.setColor(Color.argb((int)(26*atmo.rain), 155, 200, 245));
-            float strkLen = r * (2.2f + near.nextFloat() * 2.5f);
-            c.drawLine(x, y+r*0.4f, x+dx*strkLen, y+r*0.4f+strkLen, dp);
+            float y = slideY(startY, speed, phase, 15000L, now, h);
+            float fadeIn = (float) Math.sin(Math.min(1f, y / (float) h) * Math.PI);
+            if (fadeIn < 0.06f) continue;
+            float dropAlpha = Math.min(255f, 215f * atmo.rain * Math.max(0.12f, fadeIn));
+            drawLensDrop(c, src, x, y, r, dropAlpha);
         }
+
+        // ── Condensation haze at bottom edge ──────────────────────────────────
+        if (atmo.rain > 0.22f) {
+            float condH = h * (0.05f + atmo.rain * 0.09f);
+            Paint cp = new Paint();
+            cp.setShader(new LinearGradient(0, h - condH * 1.6f, 0, h,
+                    Color.argb(0, 200, 218, 240),
+                    Color.argb((int)(atmo.rain * 82), 195, 215, 240),
+                    Shader.TileMode.CLAMP));
+            c.drawRect(0, h - condH * 1.6f, w, h, cp);
+            cp.setShader(null);
+        }
+    }
+
+    // ─── Rivulets ─────────────────────────────────────────────────────────────
+    // Wavy streams flowing down the glass; the leading drop bulges at the tip.
+
+    private static void drawRivulets(Canvas c, int w, int h,
+                                      long now, long hourSeed, Atmo atmo) {
+        int numRiv = (int)(2 + atmo.rain * 7f);
+        Random riv = new Random(hourSeed * 31 + 77);
+        Paint rp = new Paint(Paint.ANTI_ALIAS_FLAG);
+        rp.setStyle(Paint.Style.STROKE);
+        rp.setStrokeJoin(Paint.Join.ROUND);
+        rp.setStrokeCap(Paint.Cap.ROUND);
+
+        for (int i = 0; i < numRiv; i++) {
+            float x0     = (0.05f + riv.nextFloat() * 0.90f) * w;
+            float startY = riv.nextFloat() * h * 0.5f;
+            float speed  = 16f + riv.nextFloat() * 30f;
+            float phase  = riv.nextFloat();
+            float trailH = h * (0.08f + riv.nextFloat() * 0.18f);
+            float baseW  = 0.8f + riv.nextFloat() * 1.8f;
+
+            float headY = slideY(startY, speed, phase, 16000L, now, h);
+
+            // Trail path — from head upward with sinusoidal wobble
+            Path trail = new Path();
+            int segs = 10;
+            float segH = trailH / segs;
+            trail.moveTo(x0, headY);
+            for (int s = 1; s <= segs; s++) {
+                float ny = headY - segH * s;
+                float nx = x0 + (float)(Math.sin(ny * 0.065 + i * 1.9 + 0.3) * baseW * 5f);
+                trail.lineTo(nx, ny);
+            }
+
+            // Outer stream (wider, translucent)
+            rp.setStrokeWidth(baseW * 2.0f);
+            rp.setColor(Color.argb((int)(24 * atmo.rain), 145, 188, 238));
+            c.drawPath(trail, rp);
+            // Inner highlight (narrower, brighter)
+            rp.setStrokeWidth(baseW * 0.75f);
+            rp.setColor(Color.argb((int)(48 * atmo.rain), 200, 228, 255));
+            c.drawPath(trail, rp);
+
+            // Leading drop — teardrop bulge at the bottom of the trail
+            float dr = baseW * (2.8f + riv.nextFloat() * 1.4f);
+            Paint dp = new Paint(Paint.ANTI_ALIAS_FLAG);
+            dp.setStyle(Paint.Style.FILL);
+            dp.setColor(Color.argb((int)(58 * atmo.rain), 150, 198, 248));
+            c.drawOval(x0 - dr * 0.65f, headY, x0 + dr * 0.65f, headY + dr * 1.5f, dp);
+            // Specular on leading drop
+            dp.setColor(Color.argb((int)(74 * atmo.rain), 228, 244, 255));
+            c.drawOval(x0 - dr * 0.32f, headY + dr * 0.08f,
+                       x0 + dr * 0.08f, headY + dr * 0.58f, dp);
+        }
+    }
+
+    // ─── Lens drop ────────────────────────────────────────────────────────────
+    // Samples the scene from src, scales + flips it vertically (real lens
+    // inversion) and clips to a teardrop oval.  Adds specular highlights.
+
+    private static void drawLensDrop(Canvas c, Bitmap src,
+                                      float cx, float cy, float r, float alpha) {
+        // Teardrop clip shape
+        Path shape = new Path();
+        shape.addOval(cx - r * 0.68f, cy - r * 0.92f,
+                      cx + r * 0.68f, cy + r * 0.58f, Path.Direction.CW);
+
+        c.save();
+        c.clipPath(shape);
+
+        // Sample scene around drop center; smaller margin = more magnification
+        float margin = Math.max(r * 0.52f, 6f);
+        int sx = (int) Math.max(0, cx - margin);
+        int sy = (int) Math.max(0, cy - margin);
+        int sw = (int) Math.min(src.getWidth()  - sx, (int)(margin * 2));
+        int sh = (int) Math.min(src.getHeight() - sy, (int)(margin * 2));
+
+        if (sw > 2 && sh > 2) {
+            Bitmap sub = Bitmap.createBitmap(src, sx, sy, sw, sh);
+            // Scale to drop width; negative Y = vertical flip (lens inversion)
+            float sc = (r * 1.36f) / Math.max(sw, 1);
+            Matrix mat = new Matrix();
+            mat.setScale(sc, -sc);
+            mat.postTranslate(cx - sw * sc * 0.5f, cy + sh * sc * 0.5f);
+            Paint bp = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+            bp.setAlpha((int) Math.min(255f, alpha * 1.12f));
+            c.drawBitmap(sub, mat, bp);
+            sub.recycle();
+        }
+
+        c.restore();
+
+        // Subtle water-blue tint over the scene inside the drop
+        Paint ov = new Paint(Paint.ANTI_ALIAS_FLAG);
+        ov.setColor(Color.argb((int)(alpha * 0.17f), 78, 122, 195));
+        c.drawOval(cx - r * 0.68f, cy - r * 0.92f,
+                   cx + r * 0.68f, cy + r * 0.58f, ov);
+
+        // Rim (thin edge of water bead)
+        ov.setStyle(Paint.Style.STROKE);
+        ov.setStrokeWidth(0.9f);
+        ov.setColor(Color.argb((int)(alpha * 0.28f), 128, 168, 222));
+        c.drawOval(cx - r * 0.68f, cy - r * 0.92f,
+                   cx + r * 0.68f, cy + r * 0.58f, ov);
+        ov.setStyle(Paint.Style.FILL);
+
+        // Primary specular — bright ellipse, upper-left (light from above-right)
+        ov.setColor(Color.argb((int) Math.min(255f, alpha * 0.88f), 255, 255, 255));
+        c.drawOval(cx - r * 0.42f, cy - r * 0.82f,
+                   cx - r * 0.02f, cy - r * 0.30f, ov);
+
+        // Secondary specular — smaller, upper-right
+        ov.setColor(Color.argb((int) Math.min(255f, alpha * 0.36f), 255, 255, 255));
+        c.drawOval(cx + r * 0.08f, cy - r * 0.66f,
+                   cx + r * 0.30f, cy - r * 0.36f, ov);
+
+        // Drop shadow beneath (very subtle darkening)
+        ov.setColor(Color.argb((int)(alpha * 0.13f), 0, 4, 22));
+        c.drawOval(cx - r * 0.55f, cy + r * 0.28f,
+                   cx + r * 0.55f, cy + r * 0.62f, ov);
     }
 
     // Computes smooth continuous y-position for a glass drop.
@@ -925,7 +1118,7 @@ public class WidgetRenderer {
     // Carves an arch-shaped opening into a EVEN_ODD path.
     private static void addArchCutout(Path p, float x0, float x1, float springY, float archR,
                                        float bottom, float topH) {
-        android.graphics.RectF oval = new android.graphics.RectF(x0, topH, x1, topH + 2 * archR);
+        RectF oval = new RectF(x0, topH, x1, topH + 2 * archR);
         p.moveTo(x0, bottom);
         p.lineTo(x1, bottom);
         p.lineTo(x1, springY);
@@ -937,7 +1130,7 @@ public class WidgetRenderer {
     // Draws shadow rim and highlight along the inner arch edge.
     private static void drawArchMolding(Canvas c, float x0, float x1, float springY, float archR,
                                          float bottom, float topH) {
-        android.graphics.RectF oval = new android.graphics.RectF(x0, topH, x1, topH + 2 * archR);
+        RectF oval = new RectF(x0, topH, x1, topH + 2 * archR);
         Paint mp = new Paint(Paint.ANTI_ALIAS_FLAG);
         mp.setStyle(Paint.Style.STROKE);
 
