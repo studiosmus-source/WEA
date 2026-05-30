@@ -25,7 +25,7 @@ public class WeatherUpdateService extends IntentService {
     @Override
     protected void onHandleIntent(Intent intent) {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
-        String apiKey = prefs.getString("api_key", "");
+        String apiKey = prefs.getString("api_key", "5d65637a72e3b61f42e8223cdf07a228");
         String city   = prefs.getString("city", "");
 
         if (apiKey.isEmpty() || city.isEmpty()) return;

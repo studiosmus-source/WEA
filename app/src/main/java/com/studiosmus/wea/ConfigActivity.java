@@ -41,9 +41,9 @@ public class ConfigActivity extends Activity {
         EditText apiKeyEdit = (EditText) findViewById(R.id.edit_apikey);
         final TextView status = (TextView) findViewById(R.id.txt_status);
 
-        // Pre-fill saved values
+        // Pre-fill saved values (default key pre-populated)
         cityEdit.setText(prefs.getString("city", ""));
-        apiKeyEdit.setText(prefs.getString("api_key", ""));
+        apiKeyEdit.setText(prefs.getString("api_key", "5d65637a72e3b61f42e8223cdf07a228"));
 
         Button save = (Button) findViewById(R.id.btn_save);
         save.setOnClickListener(new View.OnClickListener() {
