@@ -82,28 +82,7 @@ public class WidgetRenderer {
         }
         addSceneEffects(base, rawPhoto != null, w, h, horizonY, time, atmo, hourSeed, now);
 
-        // No glass distortion or surface effects — clean crisp photo.
-        // Copy base before drawing so lens drops can sample the untouched scene.
-        Bitmap sceneSrc = base.copy(Bitmap.Config.ARGB_8888, false);
         Canvas canvas = new Canvas(base);
-
-        if (atmo.rain > 0.1f) {
-            drawRainOnGlass(canvas, sceneSrc, w, h, now, hourSeed, atmo);
-        }
-        sceneSrc.recycle();
-
-        // Lightning flash for storms — brief bright veil, ~every 36 s
-        if (atmo.rain > 0.85f) {
-            long lightPeriod = 28000L + (hourSeed % 9) * 3500L;
-            long lPhase = now % lightPeriod;
-            if (lPhase < 280L) {
-                float intensity = 1.0f - lPhase / 280f;
-                Paint lp = new Paint();
-                lp.setColor(Color.argb((int)(48 * intensity), 248, 252, 255));
-                canvas.drawRect(0, 0, w, h, lp);
-            }
-        }
-
         drawTimeDate(canvas, w, h);
         return base;
     }
