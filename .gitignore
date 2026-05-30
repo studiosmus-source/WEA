@@ -1,0 +1,4 @@
+build/
+debug.keystore
+wea.apk.idsig
+*.ap_

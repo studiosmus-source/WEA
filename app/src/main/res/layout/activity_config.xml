@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#1A2040"
+    android:padding="24dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/config_title"
+            android:textColor="#FFFFFF"
+            android:textSize="22sp"
+            android:layout_marginBottom="8dp"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/config_subtitle"
+            android:textColor="#90A8C0"
+            android:textSize="13sp"
+            android:layout_marginBottom="32dp"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/label_city"
+            android:textColor="#B0C4DE"
+            android:textSize="12sp"
+            android:layout_marginBottom="4dp"/>
+
+        <EditText
+            android:id="@+id/edit_city"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/hint_city"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#506070"
+            android:background="#263050"
+            android:padding="12dp"
+            android:inputType="text"
+            android:layout_marginBottom="24dp"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/label_apikey"
+            android:textColor="#B0C4DE"
+            android:textSize="12sp"
+            android:layout_marginBottom="4dp"/>
+
+        <EditText
+            android:id="@+id/edit_apikey"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/hint_apikey"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#506070"
+            android:background="#263050"
+            android:padding="12dp"
+            android:inputType="textVisiblePassword"
+            android:layout_marginBottom="8dp"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/apikey_info"
+            android:textColor="#607890"
+            android:textSize="11sp"
+            android:layout_marginBottom="32dp"/>
+
+        <Button
+            android:id="@+id/btn_save"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/btn_save"
+            android:textColor="#FFFFFF"
+            android:background="#2A5080"
+            android:padding="14dp"/>
+
+        <TextView
+            android:id="@+id/txt_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="#80C0A0"
+            android:textSize="12sp"
+            android:layout_marginTop="16dp"
+            android:gravity="center"/>
+
+    </LinearLayout>
+</ScrollView>

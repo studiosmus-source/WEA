@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">WEA</string>
+    <string name="widget_desc">Vista sul mare — data e ora</string>
+    <string name="config_title">Configura WEA</string>
+    <string name="config_subtitle">Inserisci la tua città e la chiave API OpenWeatherMap (gratuita) per aggiornare il meteo.</string>
+    <string name="label_city">Città</string>
+    <string name="hint_city">es. Roma, Milano, Napoli</string>
+    <string name="label_apikey">Chiave API OpenWeatherMap</string>
+    <string name="hint_apikey">La tua API key gratuita</string>
+    <string name="apikey_info">Ottieni una chiave gratuita su openweathermap.org (piano Free, 60 chiamate/min)</string>
+    <string name="btn_save">Salva e aggiorna widget</string>
+    <string name="status_saved">Salvato. Widget aggiornato.</string>
+    <string name="status_empty">Inserisci città e chiave API.</string>
+</resources>
