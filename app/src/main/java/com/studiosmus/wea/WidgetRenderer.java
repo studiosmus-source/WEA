@@ -130,7 +130,7 @@ public class WidgetRenderer {
     private static Bitmap loadScaledPhoto(Context ctx, int w, int h) {
         if (sCachedPhoto != null && sCachedW == w && sCachedH == h) return sCachedPhoto;
         Resources res = ctx.getResources();
-        int id = res.getIdentifier("porto_venere", "drawable", ctx.getPackageName());
+        int id = R.drawable.porto_venere;
         if (id == 0) return null;
 
         BitmapFactory.Options opts = new BitmapFactory.Options();
