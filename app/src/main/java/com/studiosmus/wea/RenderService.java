@@ -6,6 +6,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
 
@@ -16,10 +17,12 @@ public class RenderService extends Service {
 
     private static final String CHANNEL_ID = "wea_render";
     private static final int    NOTIF_ID   = 1;
-    static final long           TICK_MS    = 2000L;
+    static final long           TICK_MS    = 150L;   // ~7 fps — fluid animation
 
-    private final Handler  handler = new Handler(Looper.getMainLooper());
-    private final Runnable tick    = new Runnable() {
+    private HandlerThread handlerThread;
+    private Handler       handler;
+
+    private final Runnable tick = new Runnable() {
         @Override public void run() {
             try { SeaWidget.updateAllWidgets(RenderService.this); }
             catch (Exception ignored) {}
@@ -32,12 +35,13 @@ public class RenderService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        handlerThread = new HandlerThread("wea-render");
+        handlerThread.start();
+        handler = new Handler(handlerThread.getLooper());
         if (Build.VERSION.SDK_INT >= 26) {
-            // Android 8+: must call startForeground() to stay alive
             createChannelApi26();
             startForeground(NOTIF_ID, buildNotificationApi26());
         }
-        // On API < 26 the service can run in background without a notification
     }
 
     @Override
@@ -50,6 +54,7 @@ public class RenderService extends Service {
     @Override
     public void onDestroy() {
         handler.removeCallbacks(tick);
+        handlerThread.quitSafely();
     }
 
     @Override
