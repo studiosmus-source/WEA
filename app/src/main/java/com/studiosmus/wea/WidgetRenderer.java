@@ -69,18 +69,11 @@ public class WidgetRenderer {
         long hourSeed = now / (3600L * 1000);
         float horizonY = h * 0.45f;
 
-        // ── Background: real photo if available, procedural fallback ─────────
-        Bitmap rawPhoto = loadScaledPhoto(ctx, w, h);
-        Bitmap base;
-        if (rawPhoto != null) {
-            base = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-            Paint cp = new Paint();
-            cp.setColorFilter(new ColorMatrixColorFilter(buildColorMatrix(time, atmo)));
-            new Canvas(base).drawBitmap(rawPhoto, 0, 0, cp);
-        } else {
-            base = generateSeaSky(w, h, horizonY, time, atmo, timeSeed);
-        }
-        addSceneEffects(base, rawPhoto != null, w, h, horizonY, time, atmo, hourSeed, now);
+        // ── TEST: sfondo bianco neutro per vedere solo gli effetti meteo ────────
+        Bitmap rawPhoto = null; // foto disabilitata temporaneamente
+        Bitmap base = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        new Canvas(base).drawColor(0xFFE8EDF2); // grigio-azzurro chiaro
+        addSceneEffects(base, false, w, h, horizonY, time, atmo, hourSeed, now);
 
         Bitmap distorted = applyGlassDistortion(base, w, h);
         // base kept alive: used as clean scene source for lens-drop sampling
