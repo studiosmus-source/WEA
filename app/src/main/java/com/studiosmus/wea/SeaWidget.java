@@ -23,6 +23,7 @@ public class SeaWidget extends AppWidgetProvider {
             updateWidget(ctx, mgr, id);
         }
         scheduleWeatherUpdate(ctx);
+        RenderService.start(ctx);
     }
 
     // Called when widget size changes
@@ -49,8 +50,8 @@ public class SeaWidget extends AppWidgetProvider {
 
     @Override
     public void onDisabled(Context ctx) {
-        // Cancel weather alarm when last widget removed
         cancelWeatherUpdate(ctx);
+        RenderService.stop(ctx);
     }
 
     // ─── Widget rendering ────────────────────────────────────────────────────

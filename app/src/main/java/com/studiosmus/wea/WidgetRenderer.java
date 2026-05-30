@@ -29,7 +29,9 @@ public class WidgetRenderer {
 
         TimeOfDay time    = getTimeOfDay();
         WeatherManager.Condition weather = WeatherManager.getCondition(ctx);
-        long timeSeed = System.currentTimeMillis() / (60L * 1000); // new seed each minute
+        long now      = System.currentTimeMillis();
+        long timeSeed = now / (60L   * 1000); // background changes each minute
+        long hourSeed = now / (3600L * 1000); // element positions change each hour
 
         // horizon sits at 52% of height
         float horizonY = h * 0.52f;
@@ -38,7 +40,7 @@ public class WidgetRenderer {
         Bitmap base = generateSeaSky(w, h, horizonY, time, weather, timeSeed);
 
         // 2. Scene effects (birds, sparkles, leaves, stars) — before glass
-        addSceneEffects(base, w, h, horizonY, time, weather, timeSeed);
+        addSceneEffects(base, w, h, horizonY, time, weather, hourSeed, now);
 
         // 3. Glass wave-distortion
         Bitmap distorted = applyGlassDistortion(base, w, h);
@@ -393,43 +395,43 @@ public class WidgetRenderer {
     private static void addSceneEffects(Bitmap bmp, int w, int h, float horizonY,
                                          TimeOfDay time,
                                          WeatherManager.Condition weather,
-                                         long seed) {
+                                         long hourSeed, long now) {
         Canvas c = new Canvas(bmp);
         boolean isDay = time != TimeOfDay.NIGHT && time != TimeOfDay.DUSK;
 
-        // Water sparkles (CLEAR, day)
         if (weather == WeatherManager.Condition.CLEAR && isDay) {
-            drawWaterSparkles(c, w, h, horizonY, seed);
+            drawWaterSparkles(c, w, h, horizonY, hourSeed, now);
         }
 
-        // Birds (CLEAR, day)
         if (weather == WeatherManager.Condition.CLEAR && isDay) {
-            drawBirds(c, w, horizonY, seed);
+            drawBirds(c, w, horizonY, now);
         }
 
-        // Leaves (all weather, count varies)
-        drawLeaves(c, w, h, weather, seed);
+        drawLeaves(c, w, h, weather, hourSeed, now);
 
-        // Stars (night / dusk — only in sky)
         if (!isDay) {
-            drawStars(c, w, horizonY, seed);
+            drawStars(c, w, horizonY, hourSeed, now);
         }
     }
 
     // ── Water sparkles ────────────────────────────────────────────────────────
 
     private static void drawWaterSparkles(Canvas c, int w, int h,
-                                           float horizonY, long seed) {
+                                           float horizonY, long seed, long now) {
         Random rnd = new Random(seed * 3 + 7);
         Paint sp = new Paint(Paint.ANTI_ALIAS_FLAG);
         sp.setStrokeCap(Paint.Cap.ROUND);
 
         int count = 14 + rnd.nextInt(12);
         for (int i = 0; i < count; i++) {
-            float x  = (0.03f + rnd.nextFloat() * 0.94f) * w;
-            float y  = horizonY + rnd.nextFloat() * (h - horizonY) * 0.80f;
-            float sz = (2.5f  + rnd.nextFloat() * 4.5f) * (w / 300f);
-            int   al = 110 + rnd.nextInt(130);
+            float x      = (0.03f + rnd.nextFloat() * 0.94f) * w;
+            float y      = horizonY + rnd.nextFloat() * (h - horizonY) * 0.80f;
+            float sz     = (2.5f + rnd.nextFloat() * 4.5f) * (w / 300f);
+            long  period = 2500L + (long)(rnd.nextFloat() * 5000f);
+            float phase  = rnd.nextFloat() * (float)(Math.PI * 2);
+            float bright = (float)Math.abs(Math.sin((double)now / period * Math.PI + phase));
+            if (bright < 0.12f) continue;
+            int al = (int)(40 + bright * 200);
 
             sp.setStyle(Paint.Style.STROKE);
             sp.setStrokeWidth(sz * 0.28f);
@@ -438,55 +440,66 @@ public class WidgetRenderer {
             c.drawLine(x, y - sz, x, y + sz, sp);
             float d = sz * 0.55f;
             sp.setStrokeWidth(sz * 0.18f);
-            sp.setColor(Color.argb(al * 2/3, 255, 252, 220));
+            sp.setColor(Color.argb(al * 2 / 3, 255, 252, 220));
             c.drawLine(x-d, y-d, x+d, y+d, sp);
             c.drawLine(x+d, y-d, x-d, y+d, sp);
             sp.setStyle(Paint.Style.FILL);
-            sp.setColor(Color.argb(Math.min(255, al + 60), 255, 255, 245));
+            sp.setColor(Color.argb(Math.min(255, al + 50), 255, 255, 245));
             c.drawCircle(x, y, sz * 0.22f, sp);
         }
     }
 
     // ── Birds ─────────────────────────────────────────────────────────────────
-    // Drawn as tiny distant flocks near the horizon — static small specks
-    // read as "far-away seagulls" and don't look frozen the way close V-shapes do.
+    // Each bird follows a fixed horizontal path at constant speed.
+    // Position is purely time-based → they visibly move every 2-second tick.
+    // All flap wings in sync (flapPhase from now) so the flock looks coherent.
 
-    private static void drawBirds(Canvas c, int w, float horizonY, long seed) {
-        Random rnd = new Random(seed);
+    private static void drawBirds(Canvas c, int w, float horizonY, long now) {
+        // {cycleMs, yFraction_of_horizonY, phaseOffset_0..1, sizeScale}
+        final float[][] BIRDS = {
+            {28000f, 0.65f, 0.00f, 1.00f},
+            {35000f, 0.73f, 0.35f, 1.35f},
+            {22000f, 0.58f, 0.62f, 0.80f},
+            {40000f, 0.81f, 0.15f, 1.65f},
+            {31000f, 0.68f, 0.80f, 1.10f},
+            {25000f, 0.76f, 0.50f, 1.45f},
+            {18000f, 0.60f, 0.28f, 0.70f},
+        };
+
         Paint bp = new Paint(Paint.ANTI_ALIAS_FLAG);
         bp.setStyle(Paint.Style.STROKE);
         bp.setStrokeCap(Paint.Cap.ROUND);
 
-        int numGroups = 2 + rnd.nextInt(2);
-        for (int g = 0; g < numGroups; g++) {
-            // Groups clustered in the lower 45% of the sky — near the horizon
-            float gx = (0.07f + rnd.nextFloat() * 0.86f) * w;
-            float gy = horizonY * (0.52f + rnd.nextFloat() * 0.38f);
-            float proximity = gy / horizonY; // ~0.52–0.90: always distant
+        float flapDip = (float)Math.abs(Math.sin((double)(now % 1600L) / 1600.0 * Math.PI));
 
-            int count = 4 + rnd.nextInt(6);
-            for (int i = 0; i < count; i++) {
-                float bx  = gx + (rnd.nextFloat() - 0.5f) * w * 0.09f;
-                float by  = gy + (rnd.nextFloat() - 0.5f) * horizonY * 0.045f;
-                float sz  = (1.8f + proximity * 2.8f) * (w / 500f); // very small
-                float dip = sz * (0.08f + rnd.nextFloat() * 0.18f);
+        int margin = (int)(w * 0.08f);
+        for (float[] b : BIRDS) {
+            long  cycle = (long) b[0];
+            float yFrac = b[1];
+            float phase = b[2];
+            float scale = b[3];
 
-                bp.setStrokeWidth(Math.max(0.5f, sz * 0.24f));
-                bp.setColor(Color.argb(70 + rnd.nextInt(55), 8, 8, 18));
+            float progress = (float)(((now + (long)(phase * cycle)) % cycle) / (double)cycle);
+            float bx = -margin + progress * (w + 2 * margin);
+            float by = horizonY * yFrac;
+            float sz = scale * 3.2f * (w / 400f);
+            float dip = sz * (0.07f + 0.30f * flapDip);
 
-                Path bird = new Path();
-                bird.moveTo(bx - sz, by + dip);
-                bird.quadTo(bx - sz * 0.40f, by - sz * 0.22f, bx, by);
-                bird.quadTo(bx + sz * 0.40f, by - sz * 0.22f, bx + sz, by + dip);
-                c.drawPath(bird, bp);
-            }
+            bp.setStrokeWidth(Math.max(0.6f, sz * 0.25f));
+            bp.setColor(Color.argb(88, 8, 8, 18));
+
+            Path bird = new Path();
+            bird.moveTo(bx - sz, by + dip);
+            bird.quadTo(bx - sz * 0.42f, by - sz * 0.22f, bx, by);
+            bird.quadTo(bx + sz * 0.42f, by - sz * 0.22f, bx + sz, by + dip);
+            c.drawPath(bird, bp);
         }
     }
 
     // ── Leaves ────────────────────────────────────────────────────────────────
 
     private static void drawLeaves(Canvas c, int w, int h,
-                                    WeatherManager.Condition weather, long seed) {
+                                    WeatherManager.Condition weather, long seed, long now) {
         Random rnd = new Random(seed + 11);
         int count;
         switch (weather) {
@@ -495,6 +508,9 @@ public class WidgetRenderer {
             case RAINY:  count = 3  + rnd.nextInt(4); break;
             default:     count = 1  + rnd.nextInt(3); break;
         }
+        float wind = (weather == WeatherManager.Condition.STORMY) ? 95f :
+                     (weather == WeatherManager.Condition.WINDY)   ? 58f :
+                     (weather == WeatherManager.Condition.RAINY)   ? 30f : 16f;
         int[] colors = {
             Color.argb(185,  55,  98, 25),
             Color.argb(185,  80, 120, 22),
@@ -503,10 +519,18 @@ public class WidgetRenderer {
             Color.argb(185, 170, 130, 20),
         };
         for (int i = 0; i < count; i++) {
-            float lx    = rnd.nextFloat() * w;
-            float ly    = rnd.nextFloat() * h;
-            float angle = rnd.nextFloat() * 360f;
+            float x0    = rnd.nextFloat() * (w + 80) - 40;
+            float y0    = rnd.nextFloat() * (h + 80) - 40;
+            float vx    = (rnd.nextFloat() * 1.6f - 0.3f) * wind;   // px/s
+            float vy    = (0.2f + rnd.nextFloat() * 0.6f) * wind * 0.35f;
+            float rot   = (rnd.nextFloat() * 2f - 1f) * 110f;       // deg/s
+            float ang0  = rnd.nextFloat() * 360f;
             float size  = (5f + rnd.nextFloat() * 9f) * (w / 360f);
+            long  cycle = 7000L + (long)(rnd.nextFloat() * 11000f);
+            float t     = (float)((now % cycle) / 1000.0);
+            float lx    = ((x0 + vx * t) % (w + 120) + w + 120) % (w + 120) - 40;
+            float ly    = ((y0 + vy * t) % (h + 120) + h + 120) % (h + 120) - 40;
+            float angle = ang0 + rot * t;
             drawSingleLeaf(c, lx, ly, size, angle, colors[rnd.nextInt(colors.length)]);
         }
     }
@@ -533,9 +557,9 @@ public class WidgetRenderer {
 
     // ── Stars ─────────────────────────────────────────────────────────────────
 
-    private static void drawStars(Canvas c, int w, float skyH, long seed) {
-        Random pos  = new Random(seed + 42);
-        Random twkl = new Random(seed);      // same seed → varies each minute
+    private static void drawStars(Canvas c, int w, float skyH, long seed, long now) {
+        Random pos   = new Random(seed + 42);
+        Random parms = new Random(seed + 99); // twinkle period & phase
 
         Paint sp = new Paint(Paint.ANTI_ALIAS_FLAG);
         int count = 30 + pos.nextInt(20);
@@ -544,12 +568,18 @@ public class WidgetRenderer {
             float x    = pos.nextFloat() * w;
             float y    = pos.nextFloat() * skyH * 0.90f;
             float base = 0.25f + pos.nextFloat() * 0.75f;
-            boolean big = pos.nextFloat() < 0.12f;
+            boolean big      = pos.nextFloat() < 0.12f;
             boolean twinkles = pos.nextFloat() < 0.28f;
 
-            float bright = twinkles
-                    ? base * (0.4f + Math.abs((float)Math.sin(twkl.nextFloat() * Math.PI * 2)) * 0.6f)
-                    : base;
+            float bright;
+            if (twinkles) {
+                long  period = 2000L + (long)(parms.nextFloat() * 3500f);
+                float phase  = parms.nextFloat() * (float)(Math.PI * 2);
+                bright = base * (0.3f + 0.7f * (float)Math.abs(
+                        Math.sin((double)now / period * Math.PI + phase)));
+            } else {
+                bright = base;
+            }
             int alpha = (int)(bright * 220);
             float r   = (big ? 1.9f : 0.9f) * (w / 330f);
 
