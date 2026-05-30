@@ -25,42 +25,50 @@ public class WidgetRenderer {
 
     public static Bitmap render(Context ctx, int dpWidth, int dpHeight) {
         float density = ctx.getResources().getDisplayMetrics().density;
-        int w = Math.min(600, Math.max(140, (int) (dpWidth  * density)));
-        int h = Math.min(900, Math.max(230, (int) (dpHeight * density)));
+        int w = Math.min(800, Math.max(200, (int) (dpWidth  * density)));
+        int h = Math.min(600, Math.max(120, (int) (dpHeight * density)));
 
         TimeOfDay time    = getTimeOfDay();
         WeatherManager.Condition weather = WeatherManager.getCondition(ctx);
 
-        // 1. Load and scale base photo
+        // 1. Load + scale base photo
         Bitmap base = loadBase(ctx, w, h);
 
-        // 2. Apply time-of-day and weather color overlay
-        Bitmap tinted = applyTimeWeatherOverlay(base, w, h, time, weather);
+        // 2. Scene: time/weather overlay + sun glow + birds (all before glass)
+        Bitmap scene = applySceneOverlay(base, w, h, time, weather);
         base.recycle();
 
-        // 3. Apply glass distortion (pixel displacement)
-        Bitmap distorted = applyGlassDistortion(tinted, w, h);
-        tinted.recycle();
+        // 3. Glass distortion (pixel-level wave displacement)
+        Bitmap distorted = applyGlassDistortion(scene, w, h);
+        scene.recycle();
 
-        // 4. Draw glass surface effects (bubbles, tint, vignette, streaks)
+        // 4. Glass surface: tint, vignette, bubbles, streaks
         Canvas canvas = new Canvas(distorted);
         drawGlassSurface(canvas, w, h);
 
-        // 5. Rain on glass (when rainy/stormy)
+        // 5. Lens flare on glass (sunlight hitting the glass pane itself)
+        if (weather == WeatherManager.Condition.CLEAR) {
+            drawLensFlare(canvas, w, h, time);
+        }
+
+        // 6. Rain drops on glass
         if (weather == WeatherManager.Condition.RAINY
                 || weather == WeatherManager.Condition.STORMY) {
             drawRainOnGlass(canvas, w, h);
         }
 
-        // 6. Date / time — always crisp, drawn last (in front of glass)
+        // 7. Date/time — crisp, rendered after all glass effects
         drawTimeDate(canvas, w, h);
+
+        // 8. Window frame — drawn last, always on top
+        drawWindowFrame(canvas, w, h);
 
         return distorted;
     }
 
     // ─── Time detection ─────────────────────────────────────────────────────
 
-    private static TimeOfDay getTimeOfDay() {
+    static TimeOfDay getTimeOfDay() {
         int h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
         if (h >= 5  && h < 7)  return TimeOfDay.DAWN;
         if (h >= 7  && h < 11) return TimeOfDay.MORNING;
@@ -71,7 +79,7 @@ public class WidgetRenderer {
         return TimeOfDay.NIGHT;
     }
 
-    // ─── Load & scale base photo ─────────────────────────────────────────────
+    // ─── Load + scale base photo ─────────────────────────────────────────────
 
     private static Bitmap loadBase(Context ctx, int w, int h) {
         BitmapFactory.Options opts = new BitmapFactory.Options();
@@ -84,14 +92,31 @@ public class WidgetRenderer {
 
         Bitmap raw = BitmapFactory.decodeResource(ctx.getResources(), R.drawable.sea, opts);
         if (raw == null) {
-            // Fallback: plain ocean blue if image fails to load
             Bitmap fb = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
             fb.eraseColor(0xFF0D47A1);
             return fb;
         }
-        Bitmap scaled = Bitmap.createScaledBitmap(raw, w, h, true);
+
+        // Center-crop to widget dimensions
+        Bitmap scaled = centerCrop(raw, w, h);
         if (scaled != raw) raw.recycle();
         return scaled;
+    }
+
+    private static Bitmap centerCrop(Bitmap src, int dstW, int dstH) {
+        int srcW = src.getWidth();
+        int srcH = src.getHeight();
+        float scaleW = (float) dstW / srcW;
+        float scaleH = (float) dstH / srcH;
+        float scale  = Math.max(scaleW, scaleH);
+        int scaledW  = (int) (srcW * scale);
+        int scaledH  = (int) (srcH * scale);
+        Bitmap scaled = Bitmap.createScaledBitmap(src, scaledW, scaledH, true);
+        int offX = (scaledW - dstW) / 2;
+        int offY = (scaledH - dstH) / 2;
+        Bitmap cropped = Bitmap.createBitmap(scaled, offX, offY, dstW, dstH);
+        if (scaled != src) scaled.recycle();
+        return cropped;
     }
 
     private static int computeSampleSize(int srcW, int srcH, int dstW, int dstH) {
@@ -100,19 +125,18 @@ public class WidgetRenderer {
         return size;
     }
 
-    // ─── Time / weather overlay ──────────────────────────────────────────────
+    // ─── Scene overlay: time/weather + sun glow + birds ──────────────────────
 
-    private static Bitmap applyTimeWeatherOverlay(Bitmap src, int w, int h,
-                                                   TimeOfDay time,
-                                                   WeatherManager.Condition weather) {
+    private static Bitmap applySceneOverlay(Bitmap src, int w, int h,
+                                             TimeOfDay time,
+                                             WeatherManager.Condition weather) {
         Bitmap result = src.copy(Bitmap.Config.ARGB_8888, true);
         Canvas c = new Canvas(result);
         Paint p = new Paint();
 
-        // Time-of-day tint
+        // — Time of day tint —
         switch (time) {
             case DAWN:
-                // Deep blue-purple + warm orange glow near horizon
                 p.setColor(Color.argb(110, 20, 5, 60));
                 c.drawRect(0, 0, w, h, p);
                 p.setShader(new LinearGradient(0, h * 0.3f, 0, h * 0.75f,
@@ -122,30 +146,25 @@ public class WidgetRenderer {
                 break;
 
             case MORNING:
-                // Slight blue-white boost, almost natural
-                p.setColor(Color.argb(20, 180, 210, 255));
+                p.setColor(Color.argb(18, 180, 210, 255));
                 c.drawRect(0, 0, w, h, p);
                 break;
 
             case NOON:
-                // Bright, high contrast — almost no overlay
-                p.setColor(Color.argb(10, 255, 255, 240));
+                p.setColor(Color.argb(8, 255, 255, 240));
                 c.drawRect(0, 0, w, h, p);
-                // Slight sun-glare shimmer at top
                 p.setShader(new LinearGradient(0, 0, 0, h * 0.2f,
-                        Color.argb(35, 255, 255, 200), Color.TRANSPARENT, Shader.TileMode.CLAMP));
+                        Color.argb(30, 255, 255, 200), Color.TRANSPARENT, Shader.TileMode.CLAMP));
                 c.drawRect(0, 0, w, h * 0.2f, p);
                 p.setShader(null);
                 break;
 
             case AFTERNOON:
-                // Warm golden tint
-                p.setColor(Color.argb(40, 255, 180, 50));
+                p.setColor(Color.argb(38, 255, 180, 50));
                 c.drawRect(0, 0, w, h, p);
                 break;
 
             case SUNSET:
-                // Strong orange-red on upper half, deep purple-red overall
                 p.setColor(Color.argb(90, 50, 10, 30));
                 c.drawRect(0, 0, w, h, p);
                 p.setShader(new LinearGradient(0, 0, 0, h * 0.65f,
@@ -165,15 +184,14 @@ public class WidgetRenderer {
             case NIGHT:
                 p.setColor(Color.argb(200, 5, 5, 20));
                 c.drawRect(0, 0, w, h, p);
-                // Moonlight: faint silver shimmer on sea portion
-                p.setShader(new LinearGradient(w * 0.4f, h * 0.55f, w * 0.6f, h,
-                        Color.argb(30, 200, 210, 240), Color.TRANSPARENT, Shader.TileMode.CLAMP));
+                p.setShader(new LinearGradient(w * 0.35f, h * 0.55f, w * 0.65f, h,
+                        Color.argb(28, 200, 210, 240), Color.TRANSPARENT, Shader.TileMode.CLAMP));
                 c.drawRect(0, h * 0.55f, w, h, p);
                 p.setShader(null);
                 break;
         }
 
-        // Weather overlay on top of time tint
+        // — Weather overlay —
         switch (weather) {
             case CLOUDY:
                 p.setColor(Color.argb(55, 100, 110, 130));
@@ -191,10 +209,95 @@ public class WidgetRenderer {
                 break;
         }
 
+        // — CLEAR weather: sun glow in scene + birds —
+        if (weather == WeatherManager.Condition.CLEAR) {
+            drawSunGlare(c, w, h, time);
+            long birdSeed = System.currentTimeMillis() / (10L * 60 * 1000); // new position every 10 min
+            drawBirds(c, w, h, time, birdSeed);
+        }
+
         return result;
     }
 
-    // ─── Glass distortion (old 1800s glass — wave displacement) ─────────────
+    // ─── Sun glow (in scene, will be distorted by glass) ────────────────────
+
+    private static void drawSunGlare(Canvas c, int w, int h, TimeOfDay time) {
+        float sx, sy;
+        switch (time) {
+            case DAWN:      sx = 0.10f; sy = 0.42f; break;
+            case MORNING:   sx = 0.22f; sy = 0.22f; break;
+            case NOON:      sx = 0.62f; sy = 0.10f; break;
+            case AFTERNOON: sx = 0.80f; sy = 0.18f; break;
+            case SUNSET:    sx = 0.90f; sy = 0.38f; break;
+            default: return;
+        }
+
+        float sunX = sx * w;
+        float sunY = sy * h;
+
+        Paint gp = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+        // Large diffuse glow
+        gp.setShader(new RadialGradient(sunX, sunY, w * 0.32f,
+                Color.argb(65, 255, 248, 200), Color.TRANSPARENT, Shader.TileMode.CLAMP));
+        c.drawRect(0, 0, w, h, gp);
+
+        // Medium glow
+        gp.setShader(new RadialGradient(sunX, sunY, w * 0.10f,
+                Color.argb(110, 255, 255, 220), Color.TRANSPARENT, Shader.TileMode.CLAMP));
+        c.drawCircle(sunX, sunY, w * 0.10f, gp);
+
+        // Bright core
+        gp.setShader(null);
+        gp.setColor(Color.argb(80, 255, 255, 245));
+        c.drawCircle(sunX, sunY, w * 0.022f, gp);
+
+        // Water reflection shimmer (sun on sea surface, lower portion)
+        if (time == TimeOfDay.MORNING || time == TimeOfDay.NOON || time == TimeOfDay.AFTERNOON) {
+            float refX = sunX * 0.6f + w * 0.2f; // reflection slightly offset
+            float refY = h * 0.82f;
+            gp.setShader(new RadialGradient(refX, refY, w * 0.10f,
+                    Color.argb(45, 255, 255, 220), Color.TRANSPARENT, Shader.TileMode.CLAMP));
+            c.drawRect(refX - w * 0.10f, h * 0.68f, refX + w * 0.10f, h, gp);
+        }
+    }
+
+    // ─── Birds (in scene, distorted by glass) ────────────────────────────────
+
+    private static void drawBirds(Canvas c, int w, int h, TimeOfDay time, long seed) {
+        if (time == TimeOfDay.DUSK || time == TimeOfDay.NIGHT) return;
+
+        Random rnd = new Random(seed);
+        Paint bp = new Paint(Paint.ANTI_ALIAS_FLAG);
+        bp.setStyle(Paint.Style.STROKE);
+        bp.setStrokeCap(Paint.Cap.ROUND);
+
+        float skyBase = h * 0.46f; // sky occupies top 46%
+        int count = 3 + rnd.nextInt(5); // 3–7 birds
+
+        for (int i = 0; i < count; i++) {
+            float bx  = (0.06f + rnd.nextFloat() * 0.88f) * w;
+            float by  = (0.04f + rnd.nextFloat() * 0.82f) * skyBase;
+
+            // Birds higher up = farther = smaller
+            float dist = by / skyBase;  // 0=top=far, 1=horizon=close
+            float size = (2.5f + dist * 9f) * (w / 350f);
+
+            // Wing angle varies slightly per bird
+            float dip = rnd.nextFloat() * 0.35f;
+
+            bp.setStrokeWidth(Math.max(0.8f, size * 0.30f));
+            bp.setColor(Color.argb(150 + rnd.nextInt(80), 15, 15, 25));
+
+            Path bird = new Path();
+            bird.moveTo(bx - size, by + size * dip);
+            bird.quadTo(bx - size * 0.44f, by - size * 0.28f, bx, by + size * 0.06f);
+            bird.quadTo(bx + size * 0.44f, by - size * 0.28f, bx + size, by + size * dip);
+            c.drawPath(bird, bp);
+        }
+    }
+
+    // ─── Glass distortion ────────────────────────────────────────────────────
 
     private static Bitmap applyGlassDistortion(Bitmap src, int w, int h) {
         int[] srcPx = new int[w * h];
@@ -203,13 +306,12 @@ public class WidgetRenderer {
 
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
-                // Long wave: large-scale thickness variation
+                // Long wave: large-scale glass thickness variation
                 double dx1 = 3.2 * Math.sin(y * 0.014 + 0.53)
                            + 1.8 * Math.cos(x * 0.011 + y * 0.007);
                 double dy1 = 2.8 * Math.cos(x * 0.013 + 1.21)
                            + 1.6 * Math.sin(y * 0.010 + x * 0.006);
-
-                // Short wave: manufacturing flow marks
+                // Short wave: manufacturing flow
                 double dx2 = 0.9 * Math.sin(x * 0.048 + y * 0.031);
                 double dy2 = 0.7 * Math.cos(y * 0.042 + x * 0.022);
 
@@ -229,35 +331,28 @@ public class WidgetRenderer {
     private static void drawGlassSurface(Canvas c, int w, int h) {
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-        // Slight green-mineral tint (iron content in old glass)
+        // Mineral green tint
         p.setColor(Color.argb(22, 25, 70, 15));
         c.drawRect(0, 0, w, h, p);
 
-        // Vignette: edges of glass are thicker, darker
-        p.setShader(new RadialGradient(
-                w / 2f, h / 2f,
+        // Vignette
+        p.setShader(new RadialGradient(w / 2f, h / 2f,
                 (float) Math.max(w, h) * 0.62f,
-                Color.TRANSPARENT,
-                Color.argb(75, 0, 0, 0),
-                Shader.TileMode.CLAMP));
+                Color.TRANSPARENT, Color.argb(75, 0, 0, 0), Shader.TileMode.CLAMP));
         c.drawRect(0, 0, w, h, p);
         p.setShader(null);
 
-        // Top-edge surface reflection (glass reflects ambient light at top)
-        p.setShader(new LinearGradient(0, 0, 0, h * 0.12f,
-                Color.argb(28, 255, 255, 255), Color.TRANSPARENT, Shader.TileMode.CLAMP));
-        c.drawRect(0, 0, w, h * 0.12f, p);
+        // Top-edge ambient reflection
+        p.setShader(new LinearGradient(0, 0, 0, h * 0.10f,
+                Color.argb(26, 255, 255, 255), Color.TRANSPARENT, Shader.TileMode.CLAMP));
+        c.drawRect(0, 0, w, h * 0.10f, p);
         p.setShader(null);
 
-        // Bubbles
         drawBubbles(c, w, h, p);
-
-        // Faint vertical flow streaks
         drawGlassStreaks(c, w, h);
     }
 
     private static void drawBubbles(Canvas c, int w, int h, Paint p) {
-        // Fixed positions (like a real pane — always in same spot)
         float[][] bubbles = {
             {0.14f, 0.11f, 0.013f},
             {0.73f, 0.27f, 0.009f},
@@ -270,23 +365,16 @@ public class WidgetRenderer {
             {0.56f, 0.77f, 0.009f},
             {0.91f, 0.44f, 0.006f},
         };
-
         for (float[] b : bubbles) {
             float cx = b[0] * w;
             float cy = b[1] * h;
             float r  = b[2] * Math.min(w, h);
-
-            // Outer ring
             p.setStyle(Paint.Style.STROKE);
             p.setStrokeWidth(0.8f);
             p.setColor(Color.argb(55, 180, 210, 180));
             c.drawCircle(cx, cy, r, p);
-
-            // Inner dark ring
             p.setColor(Color.argb(30, 0, 10, 0));
             c.drawCircle(cx, cy, r * 0.8f, p);
-
-            // Highlight (light caught on bubble surface)
             p.setStyle(Paint.Style.FILL);
             p.setColor(Color.argb(65, 255, 255, 255));
             c.drawCircle(cx - r * 0.32f, cy - r * 0.32f, r * 0.35f, p);
@@ -299,17 +387,14 @@ public class WidgetRenderer {
         sp.setStyle(Paint.Style.STROKE);
         sp.setStrokeWidth(0.9f);
         sp.setColor(Color.argb(18, 255, 255, 255));
-
         Path s1 = new Path();
         s1.moveTo(w * 0.28f, 0);
         s1.cubicTo(w * 0.31f, h * 0.28f, w * 0.26f, h * 0.55f, w * 0.30f, h);
         c.drawPath(s1, sp);
-
         Path s2 = new Path();
         s2.moveTo(w * 0.68f, 0);
         s2.cubicTo(w * 0.71f, h * 0.32f, w * 0.67f, h * 0.62f, w * 0.70f, h);
         c.drawPath(s2, sp);
-
         sp.setColor(Color.argb(10, 255, 255, 255));
         sp.setStrokeWidth(1.5f);
         Path s3 = new Path();
@@ -318,39 +403,69 @@ public class WidgetRenderer {
         c.drawPath(s3, sp);
     }
 
-    // ─── Rain drops on glass ─────────────────────────────────────────────────
+    // ─── Lens flare on glass surface (sun hitting the glass pane itself) ─────
+
+    private static void drawLensFlare(Canvas c, int w, int h, TimeOfDay time) {
+        float sx, sy;
+        switch (time) {
+            case MORNING:   sx = 0.22f; sy = 0.22f; break;
+            case NOON:      sx = 0.62f; sy = 0.10f; break;
+            case AFTERNOON: sx = 0.80f; sy = 0.18f; break;
+            default: return; // no lens flare at dawn/dusk/night
+        }
+
+        float sunX = sx * w;
+        float sunY = sy * h;
+        // Flares appear along the line from sun through center and beyond
+        float dirX = 0.5f * w - sunX;
+        float dirY = 0.5f * h - sunY;
+
+        float[][] flares = {
+            // t along axis, radius factor, alpha
+            {0.25f,  8f, 50},
+            {0.50f,  5f, 32},
+            {0.72f, 16f, 42},
+            {0.95f,  4f, 25},
+            {1.20f,  9f, 35},
+        };
+
+        Paint fp = new Paint(Paint.ANTI_ALIAS_FLAG);
+        for (float[] f : flares) {
+            float fx = sunX + dirX * f[0];
+            float fy = sunY + dirY * f[0];
+            float fr = f[1] * (w / 220f);
+            int   fa = (int) f[2];
+            fp.setShader(new RadialGradient(fx, fy, fr,
+                    Color.argb(fa, 200, 215, 255), Color.TRANSPARENT, Shader.TileMode.CLAMP));
+            c.drawCircle(fx, fy, fr, fp);
+        }
+    }
+
+    // ─── Rain on glass ───────────────────────────────────────────────────────
 
     private static void drawRainOnGlass(Canvas c, int w, int h) {
-        // Seed changes each minute → new drop pattern each minute
         long seed = System.currentTimeMillis() / 60000L;
         Random rnd = new Random(seed);
-
         Paint dp = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-        // Drops (teardrop-ish blobs)
         for (int i = 0; i < 18; i++) {
             float x = rnd.nextFloat() * w;
             float y = rnd.nextFloat() * h;
-            float r = (2f + rnd.nextFloat() * 5f) * (w / 200f);
-
+            float r = (2f + rnd.nextFloat() * 5f) * (w / 240f);
             dp.setStyle(Paint.Style.FILL);
             dp.setColor(Color.argb(70, 180, 210, 240));
             c.drawOval(x - r * 0.55f, y - r, x + r * 0.55f, y + r * 0.35f, dp);
-
-            // Highlight
             dp.setColor(Color.argb(110, 255, 255, 255));
-            c.drawOval(x - r * 0.28f, y - r * 0.8f, x + r * 0.05f, y - r * 0.2f, dp);
+            c.drawOval(x - r * 0.28f, y - r * 0.80f, x + r * 0.05f, y - r * 0.20f, dp);
         }
 
-        // Running streaks
         Paint sp = new Paint(Paint.ANTI_ALIAS_FLAG);
         sp.setStyle(Paint.Style.STROKE);
         sp.setColor(Color.argb(50, 180, 210, 255));
-
         for (int i = 0; i < 22; i++) {
             float x  = rnd.nextFloat() * w;
             float y0 = rnd.nextFloat() * h * 0.7f;
-            float len = (15 + rnd.nextFloat() * 90) * (h / 500f);
+            float len = (15 + rnd.nextFloat() * 90) * (h / 400f);
             sp.setStrokeWidth(0.7f + rnd.nextFloat() * 1.4f);
             Path streak = new Path();
             streak.moveTo(x, y0);
@@ -359,14 +474,12 @@ public class WidgetRenderer {
         }
     }
 
-    // ─── Date / time overlay (always crisp — drawn after glass) ─────────────
+    // ─── Date / time overlay ─────────────────────────────────────────────────
 
     private static void drawTimeDate(Canvas c, int w, int h) {
         Calendar cal = Calendar.getInstance();
-        int hour   = cal.get(Calendar.HOUR_OF_DAY);
-        int minute = cal.get(Calendar.MINUTE);
-
-        String timeStr = String.format("%02d:%02d", hour, minute);
+        String timeStr = String.format("%02d:%02d",
+                cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE));
 
         String[] days   = {"Dom", "Lun", "Mar", "Mer", "Gio", "Ven", "Sab"};
         String[] months = {"Gen", "Feb", "Mar", "Apr", "Mag", "Giu",
@@ -375,33 +488,126 @@ public class WidgetRenderer {
                 + cal.get(Calendar.DAY_OF_MONTH) + " "
                 + months[cal.get(Calendar.MONTH)];
 
-        float shadow = h * 0.012f;
+        float shadow = h * 0.018f;
 
-        // Time
         Paint tp = new Paint(Paint.ANTI_ALIAS_FLAG);
         tp.setColor(Color.WHITE);
         tp.setTypeface(Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD));
-        tp.setTextSize(h * 0.19f);
+        tp.setTextSize(h * 0.30f);
         tp.setLetterSpacing(0.04f);
         tp.setShadowLayer(shadow * 1.8f, 0, shadow, Color.argb(160, 0, 0, 0));
-
         float tw = tp.measureText(timeStr);
-        float tx = (w - tw) / 2f;
-        float ty = h * 0.52f;
-        c.drawText(timeStr, tx, ty, tp);
+        c.drawText(timeStr, (w - tw) / 2f, h * 0.56f, tp);
 
-        // Date
         Paint dp = new Paint(Paint.ANTI_ALIAS_FLAG);
         dp.setColor(Color.argb(230, 255, 255, 255));
         dp.setTypeface(Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL));
-        dp.setTextSize(h * 0.085f);
+        dp.setTextSize(h * 0.130f);
         dp.setLetterSpacing(0.18f);
         dp.setShadowLayer(shadow * 1.4f, 0, shadow * 0.7f, Color.argb(140, 0, 0, 0));
-
         float dw = dp.measureText(dateStr);
-        float dx = (w - dw) / 2f;
-        float dy = ty + h * 0.11f;
-        c.drawText(dateStr, dx, dy, dp);
+        c.drawText(dateStr, (w - dw) / 2f, h * 0.56f + h * 0.165f, dp);
+    }
+
+    // ─── Window frame ────────────────────────────────────────────────────────
+
+    private static void drawWindowFrame(Canvas c, int w, int h) {
+        // Frame thickness proportional to smaller dimension
+        float t = Math.min(w, h) * 0.085f;
+
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+        // — 1. Outer shadow (thin dark edge around widget) —
+        p.setColor(Color.argb(160, 10, 8, 5));
+        c.drawRect(0, 0, w, 2.5f, p);
+        c.drawRect(0, h - 2.5f, w, h, p);
+        c.drawRect(0, 0, 2.5f, h, p);
+        c.drawRect(w - 2.5f, 0, w, h, p);
+
+        // — 2. Frame body: aged wood (warm brown gradient) —
+        // Top bar
+        p.setShader(new LinearGradient(0, 0, 0, t,
+                Color.argb(255, 120, 82, 42),  // top highlight
+                Color.argb(255, 72, 46, 20),   // bottom shadow
+                Shader.TileMode.CLAMP));
+        c.drawRect(0, 0, w, t, p);
+
+        // Bottom bar
+        p.setShader(new LinearGradient(0, h - t, 0, h,
+                Color.argb(255, 60, 38, 16),
+                Color.argb(255, 90, 60, 28),
+                Shader.TileMode.CLAMP));
+        c.drawRect(0, h - t, w, h, p);
+
+        // Left bar
+        p.setShader(new LinearGradient(0, 0, t, 0,
+                Color.argb(255, 110, 74, 36),
+                Color.argb(255, 68, 44, 18),
+                Shader.TileMode.CLAMP));
+        c.drawRect(0, 0, t, h, p);
+
+        // Right bar
+        p.setShader(new LinearGradient(w - t, 0, w, 0,
+                Color.argb(255, 62, 40, 18),
+                Color.argb(255, 95, 62, 30),
+                Shader.TileMode.CLAMP));
+        c.drawRect(w - t, 0, w, h, p);
+        p.setShader(null);
+
+        // — 3. Wood grain hints (subtle horizontal/vertical streaks) —
+        Paint gp = new Paint();
+        gp.setColor(Color.argb(22, 200, 150, 80));
+        for (float y = 3f; y < t - 2; y += 5.5f) {
+            gp.setStrokeWidth(0.8f);
+            c.drawLine(t, y, w - t, y, gp);            // top
+            c.drawLine(t, h - y, w - t, h - y, gp);    // bottom
+        }
+        for (float x = 3f; x < t - 2; x += 5.5f) {
+            c.drawLine(x, t, x, h - t, gp);            // left
+            c.drawLine(w - x, t, w - x, h - t, gp);    // right
+        }
+
+        // — 4. Inner bevel: bright top-left, dark bottom-right (3D depth) —
+        Paint bp = new Paint(Paint.ANTI_ALIAS_FLAG);
+        bp.setStyle(Paint.Style.STROKE);
+        bp.setStrokeWidth(1.8f);
+
+        // Bright inner edge (top + left inside faces)
+        bp.setColor(Color.argb(120, 200, 160, 100));
+        c.drawLine(t, t, w - t, t, bp);          // top inner edge
+        c.drawLine(t, t, t, h - t, bp);           // left inner edge
+
+        // Dark inner edge (bottom + right inside faces)
+        bp.setColor(Color.argb(140, 20, 12, 5));
+        c.drawLine(t, h - t, w - t, h - t, bp);  // bottom inner edge
+        c.drawLine(w - t, t, w - t, h - t, bp);  // right inner edge
+
+        // — 5. Inner shadow cast onto glass from frame —
+        p.setShader(new LinearGradient(0, 0, 0, t * 1.4f,
+                Color.argb(80, 0, 0, 0), Color.TRANSPARENT, Shader.TileMode.CLAMP));
+        c.drawRect(t, t, w - t, t * 1.4f + t, p);
+
+        p.setShader(new LinearGradient(0, h - t * 1.4f, 0, h - t,
+                Color.TRANSPARENT, Color.argb(70, 0, 0, 0), Shader.TileMode.CLAMP));
+        c.drawRect(t, h - t * 1.4f - t, w - t, h - t, p);
+        p.setShader(null);
+
+        // — 6. Corner joins (darker square covers the overlap) —
+        p.setColor(Color.argb(255, 55, 35, 14));
+        c.drawRect(0, 0, t, t, p);           // top-left
+        c.drawRect(w - t, 0, w, t, p);       // top-right
+        c.drawRect(0, h - t, t, h, p);       // bottom-left
+        c.drawRect(w - t, h - t, w, h, p);   // bottom-right
+
+        // Corner highlight dot (nail/peg suggestion)
+        Paint cp = new Paint(Paint.ANTI_ALIAS_FLAG);
+        cp.setColor(Color.argb(80, 180, 140, 80));
+        float nr = t * 0.22f;
+        float no = t * 0.50f;
+        c.drawCircle(no, no, nr, cp);
+        c.drawCircle(w - no, no, nr, cp);
+        c.drawCircle(no, h - no, nr, cp);
+        c.drawCircle(w - no, h - no, nr, cp);
     }
 
     // ─── Utility ─────────────────────────────────────────────────────────────
