@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8"/>
+<title>WEA Widget — Documentazione tecnica</title>
+<style>
+  @page { margin: 2.2cm 2.4cm; size: A4; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.6;
+    color: #1a1a2e;
+    background: #fff;
+  }
+  /* ── Cover ── */
+  .cover {
+    text-align: center;
+    padding: 80px 0 60px;
+    border-bottom: 3px solid #2a5080;
+    margin-bottom: 48px;
+    page-break-after: always;
+  }
+  .cover h1 {
+    font-size: 32pt;
+    color: #0d2240;
+    letter-spacing: 0.05em;
+    margin: 0 0 8px;
+  }
+  .cover .sub {
+    font-size: 14pt;
+    color: #2a5080;
+    margin: 0 0 32px;
+  }
+  .cover .meta {
+    font-size: 9pt;
+    color: #607890;
+  }
+  .cover .badge {
+    display: inline-block;
+    background: #1a3050;
+    color: #90c8f0;
+    border-radius: 4px;
+    padding: 4px 12px;
+    font-size: 9pt;
+    font-family: monospace;
+    margin: 4px;
+  }
+  /* ── TOC ── */
+  .toc { page-break-after: always; }
+  .toc h2 { color: #0d2240; border-bottom: 2px solid #e0e8f0; padding-bottom: 6px; }
+  .toc ol { line-height: 2; padding-left: 20px; }
+  .toc a { color: #2a5080; text-decoration: none; }
+  /* ── Sections ── */
+  h2 {
+    font-size: 16pt;
+    color: #0d2240;
+    border-bottom: 2px solid #dce8f4;
+    padding-bottom: 6px;
+    margin-top: 36px;
+  }
+  h3 {
+    font-size: 12pt;
+    color: #1a3a60;
+    margin-top: 24px;
+    margin-bottom: 6px;
+  }
+  h4 {
+    font-size: 10.5pt;
+    color: #2a5080;
+    margin-bottom: 4px;
+  }
+  p { margin: 0 0 10px; }
+  /* ── Code ── */
+  pre, code {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 8.5pt;
+  }
+  pre {
+    background: #f0f4f8;
+    border-left: 3px solid #2a5080;
+    border-radius: 0 4px 4px 0;
+    padding: 10px 14px;
+    margin: 12px 0;
+    overflow: hidden;
+    white-space: pre-wrap;
+  }
+  code {
+    background: #eef2f7;
+    border-radius: 3px;
+    padding: 1px 5px;
+  }
+  /* ── Tables ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0;
+    font-size: 9.5pt;
+  }
+  th {
+    background: #1a3a60;
+    color: #fff;
+    padding: 7px 10px;
+    text-align: left;
+    font-weight: 600;
+  }
+  td {
+    padding: 6px 10px;
+    border-bottom: 1px solid #dce8f4;
+    vertical-align: top;
+  }
+  tr:nth-child(even) td { background: #f5f9fd; }
+  /* ── Callouts ── */
+  .note {
+    background: #e8f2fd;
+    border-left: 4px solid #2a6ab0;
+    border-radius: 0 4px 4px 0;
+    padding: 10px 14px;
+    margin: 12px 0;
+    font-size: 9.5pt;
+  }
+  .pipeline {
+    background: #f0f4f8;
+    border: 1px solid #c8d8e8;
+    border-radius: 6px;
+    padding: 16px 20px;
+    margin: 14px 0;
+    font-family: monospace;
+    font-size: 9pt;
+    line-height: 2;
+  }
+  .pipeline .arrow { color: #2a5080; }
+  .pipeline .comment { color: #607890; margin-left: 12px; font-style: italic; }
+  /* ── Page breaks ── */
+  .pb { page-break-before: always; }
+  /* ── Columns for layer diagram ── */
+  .cols { display: table; width: 100%; border-spacing: 8px; }
+  .col  { display: table-cell; width: 50%; vertical-align: top; }
+  /* ── Weather badges ── */
+  .wbadge {
+    display: inline-block;
+    border-radius: 12px;
+    padding: 2px 10px;
+    font-size: 8.5pt;
+    font-weight: bold;
+    margin: 2px;
+    color: #fff;
+  }
+  .clear   { background: #1a6030; }
+  .cloudy  { background: #404858; }
+  .rainy   { background: #1a3060; }
+  .stormy  { background: #401828; }
+  .windy   { background: #284058; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════ COVER ═══════════════════════════ -->
+<div class="cover">
+  <h1>WEA</h1>
+  <p class="sub">Widget meteo con effetti vetro dell'800</p>
+  <p class="meta">Documentazione tecnica &mdash; Android AppWidget nativo &mdash; Java</p>
+  <br/>
+  <span class="badge">Android API 21+</span>
+  <span class="badge">Java 8</span>
+  <span class="badge">Canvas / Bitmap</span>
+  <span class="badge">OpenWeatherMap API</span>
+  <br/><br/>
+  <p class="meta">Branch: <code>claude/android-glass-widget-VKGIS</code></p>
+</div>
+
+<!-- ═══════════════════════════ TOC ═══════════════════════════ -->
+<div class="toc">
+  <h2>Indice</h2>
+  <ol>
+    <li>Concetto e obiettivo</li>
+    <li>Architettura generale</li>
+    <li>Pipeline di rendering</li>
+    <li>Generazione sfondo — Cielo e mare</li>
+    <li>Effetti nella scena (dietro il vetro)</li>
+    <li>Effetto vetro dell'800</li>
+    <li>Effetti sul vetro (pioggia, tinta)</li>
+    <li>Ora e data</li>
+    <li>Cornice in legno</li>
+    <li>Sistema di animazione — RenderService</li>
+    <li>Meteo — WeatherManager e WeatherUpdateService</li>
+    <li>Configurazione e test effetti</li>
+    <li>File sorgente</li>
+  </ol>
+</div>
+
+<!-- ═══════════════════════════ 1 ═══════════════════════════ -->
+<h2>1. Concetto e obiettivo</h2>
+<p>WEA è un <strong>widget per la home screen Android</strong> che simula la vista attraverso un vetro imperfetto dell'Ottocento su un paesaggio marino mediterraneo. Ora e data sono sempre leggibili e nitide; lo sfondo e gli effetti cambiano in tempo reale in base all'ora del giorno e alle condizioni meteo.</p>
+
+<table>
+  <tr><th>Caratteristica</th><th>Dettaglio</th></tr>
+  <tr><td>Tipo</td><td>AppWidgetProvider Android (home screen widget)</td></tr>
+  <tr><td>Rendering</td><td>Bitmap generata via Canvas Java, aggiornata via RemoteViews</td></tr>
+  <tr><td>Aggiornamento</td><td>Ogni 2 secondi (RenderService foreground)</td></tr>
+  <tr><td>Meteo</td><td>OpenWeatherMap API 2.5, posizione GPS o città</td></tr>
+  <tr><td>Dimensioni</td><td>2 righe fisse, larghezza ridimensionabile (resizeMode=horizontal)</td></tr>
+  <tr><td>API minima</td><td>Android 5.0 (API 21)</td></tr>
+</table>
+
+<!-- ═══════════════════════════ 2 ═══════════════════════════ -->
+<h2>2. Architettura generale</h2>
+
+<table>
+  <tr><th>Componente</th><th>Tipo Android</th><th>Responsabilità</th></tr>
+  <tr><td><code>SeaWidget</code></td><td>AppWidgetProvider</td><td>Coordinatore: riceve tick, aggiorna widget, gestisce AlarmManager</td></tr>
+  <tr><td><code>WidgetRenderer</code></td><td>Classe statica</td><td>Genera l'intera Bitmap (sfondo + effetti + vetro + testo + cornice)</td></tr>
+  <tr><td><code>RenderService</code></td><td>Foreground Service</td><td>Tick ogni 2 s → chiama updateAllWidgets() per animazione fluida</td></tr>
+  <tr><td><code>WeatherUpdateService</code></td><td>IntentService</td><td>Fetch HTTP OpenWeatherMap, salva condizione in SharedPreferences</td></tr>
+  <tr><td><code>WeatherManager</code></td><td>Classe statica</td><td>Legge/scrive condizione meteo; gestisce override di test</td></tr>
+  <tr><td><code>ConfigActivity</code></td><td>Activity</td><td>Imposta città/GPS/API key; pannello test effetti</td></tr>
+  <tr><td><code>BootReceiver</code></td><td>BroadcastReceiver</td><td>Riavvia RenderService e AlarmManager dopo il reboot</td></tr>
+</table>
+
+<div class="note">Il widget non usa Gradle, AGP, o librerie esterne. La build è uno script bash che chiama direttamente <code>aapt</code>, <code>javac</code>, <code>dx</code>, <code>zipalign</code> e <code>apksigner</code>.</div>
+
+<!-- ═══════════════════════════ 3 ═══════════════════════════ -->
+<h2 class="pb">3. Pipeline di rendering</h2>
+<p>Ogni 2 secondi <code>WidgetRenderer.render()</code> produce una nuova Bitmap che viene passata a <code>RemoteViews.setImageViewBitmap()</code>. La pipeline è strettamente sequenziale e produce l'effetto di "guardare attraverso il vetro":</p>
+
+<div class="pipeline">
+<strong>render(ctx, dpWidth, dpHeight)</strong><br/>
+&nbsp;&nbsp;│<br/>
+&nbsp;&nbsp;├─ <strong>generateSeaSky()</strong> <span class="comment">→ Bitmap base: cielo + glow + costa + foschia + mare</span><br/>
+&nbsp;&nbsp;│<br/>
+&nbsp;&nbsp;├─ <strong>addSceneEffects()</strong> <span class="comment">→ disegna SULLA bitmap base (prima della distorsione)</span><br/>
+&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;├─ drawRainInScene()   <span class="comment">pioggia nella scena, 2 layer</span><br/>
+&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;├─ drawRainRipples()   <span class="comment">cerchi d'impatto sull'acqua</span><br/>
+&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;├─ drawWaterSparkles() <span class="comment">riflessi del sole (CLEAR, giorno)</span><br/>
+&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;├─ drawBirds()         <span class="comment">gabbiani in volo (CLEAR, giorno)</span><br/>
+&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;├─ drawLeaves()        <span class="comment">foglie portate dal vento</span><br/>
+&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;└─ drawStars()         <span class="comment">stelle con brillucciatura (notte/dusk)</span><br/>
+&nbsp;&nbsp;│<br/>
+&nbsp;&nbsp;├─ <strong>applyGlassDistortion()</strong> <span class="comment">→ nuova Bitmap: distorsione pixel-per-pixel</span><br/>
+&nbsp;&nbsp;│<br/>
+&nbsp;&nbsp;├─ <strong>drawGlassSurface()</strong> <span class="comment">→ tinta minerale, vignette, bolle d'aria, striature</span><br/>
+&nbsp;&nbsp;│<br/>
+&nbsp;&nbsp;├─ <strong>drawRainOnGlass()</strong> <span class="comment">→ pioggia sul vetro (3 layer + wet tint) [solo RAINY/STORMY]</span><br/>
+&nbsp;&nbsp;│<br/>
+&nbsp;&nbsp;├─ <strong>drawTimeDate()</strong> <span class="comment">→ ora e data SEMPRE nitidi (sopra tutto)</span><br/>
+&nbsp;&nbsp;│<br/>
+&nbsp;&nbsp;└─ <strong>drawWindowFrame()</strong> <span class="comment">→ cornice in legno invecchiato</span>
+</div>
+
+<p>Il risultato è una singola Bitmap che viene inviata al launcher tramite RemoteViews. Ogni effetto usa <code>System.currentTimeMillis()</code> come sorgente di animazione, garantendo continuità anche dopo il riavvio del servizio.</p>
+
+<!-- ═══════════════════════════ 4 ═══════════════════════════ -->
+<h2 class="pb">4. Generazione sfondo — Cielo e mare</h2>
+
+<h3>4.1 Ore del giorno</h3>
+<p>La funzione <code>getTimeOfDay()</code> classifica l'ora in 7 fasce:</p>
+
+<table>
+  <tr><th>Fascia</th><th>Ore</th><th>Palette cielo</th></tr>
+  <tr><td>DAWN</td><td>5–7</td><td>Viola scuro → rosso-bordeaux → arancio caldo</td></tr>
+  <tr><td>MORNING</td><td>7–11</td><td>Blu notte → blu vivo → celeste chiaro</td></tr>
+  <tr><td>NOON</td><td>11–14</td><td>Blu cobalto → azzurro → celeste brillante</td></tr>
+  <tr><td>AFTERNOON</td><td>14–17</td><td>Blu medio → oro caldo all'orizzonte</td></tr>
+  <tr><td>SUNSET</td><td>17–20</td><td>Viola → rosso bruciato → arancio intenso</td></tr>
+  <tr><td>DUSK</td><td>20–22</td><td>Quasi nero → blu notte profondo</td></tr>
+  <tr><td>NIGHT</td><td>22–5</td><td>Nero assoluto → blu notte scurissimo</td></tr>
+</table>
+
+<h3>4.2 Cielo — drawSky()</h3>
+<p>Tre stop di gradiente lineare verticale (top → mid → orizzonte). Il meteo CLOUDY/WINDY desatura tutti i colori del 45% verso grigio; RAINY/STORMY li scurisce del 65–70% verso grigio-blu scuro.</p>
+
+<h3>4.3 Glow sole/luna — drawSunMoonGlow()</h3>
+<p>Un <code>RadialGradient</code> molto esteso simula il bagliore diffuso senza mai disegnare un disco. La posizione del sole cambia per fascia oraria (basso a sinistra all'alba, alto al centro a mezzogiorno, basso a destra al tramonto). Di notte/crepuscolo appare un glow lunare argentato in alto a destra. Con STORMY il glow è soppresso.</p>
+
+<h3>4.4 Silhouette della costa — drawCoastSilhouette()</h3>
+<p>Una path con due curve di Bézier cubiche disegna profili collinari lontani appena sopra la linea dell'orizzonte (a <code>horizonY = h * 0.52</code>). Il colore è semi-trasparente e varia con l'ora; in caso di pioggia/temporale la visibilità è ridotta al 40%.</p>
+
+<h3>4.5 Foschia orizzonte — drawHorizonHaze()</h3>
+<p>Un gradiente lineare simmetrico (Mirror) attorno alla linea di orizzonte simula la diffusione atmosferica. Il colore cambia con l'ora: arancio caldo al tramonto, blu-bianco a mezzogiorno, viola a notte.</p>
+
+<h3>4.6 Mare — drawSea()</h3>
+<p>Gradiente verticale dal colore di superficie al colore abissale. Sopra di esso:</p>
+<ul>
+  <li><strong>drawWaveLines()</strong>: 14 linee ondulate con prospettiva (scalate in larghezza e opacità in base alla distanza dall'orizzonte).</li>
+  <li><strong>drawSeaReflection()</strong>: colonna trapezoidale semi-trasparente che simula il riflesso del sole/luna sull'acqua.</li>
+</ul>
+
+<!-- ═══════════════════════════ 5 ═══════════════════════════ -->
+<h2 class="pb">5. Effetti nella scena (dietro il vetro)</h2>
+<p>Questi effetti sono disegnati sulla bitmap base <em>prima</em> della distorsione del vetro: appaiono quindi leggermente deformati dal vetro stesso, aumentando la coerenza visiva.</p>
+
+<h3>5.1 Pioggia nella scena — drawRainInScene()</h3>
+<p>Implementa i principi <em>multi-layer</em> e <em>velocity-aligned streaks</em>:</p>
+
+<table>
+  <tr><th>Layer</th><th>Posizione</th><th>Caratteristiche</th></tr>
+  <tr><td>Lontano (cielo)</td><td>Sopra l'orizzonte</td><td>Alpha 10, spessore 0.4, corte, quasi verticali</td></tr>
+  <tr><td>Vicino (mare)</td><td>Sotto l'orizzonte</td><td>Alpha 16, spessore 0.55, scalate in prospettiva, angolate dal vento</td></tr>
+</table>
+
+<p>L'angolo varia: 7° per RAINY, 18° per STORMY. Il seed temporale cambia ogni 150 ms, rendendo la pioggia visibilmente mobile.</p>
+
+<h3>5.2 Cerchi d'impatto — drawRainRipples()</h3>
+<p>Ellissi che si espandono nel tempo (<code>now % 600ms</code>) con alpha inversamente proporzionale al raggio. La prospettiva è simulata: i cerchi vicini all'orizzonte sono più piccoli ed ellittici; quelli in primo piano più grandi e quasi circolari.</p>
+
+<h3>5.3 Riflessi del sole — drawWaterSparkles()</h3>
+<p>14–26 riflessi a forma di croce (+×) sul mare. Ogni riflesso ha un proprio periodo di pulsazione (2.5–7.5 s) e una fase casuale, quindi lampeggiano in modo indipendente. Solo con CLEAR di giorno.</p>
+
+<h3>5.4 Gabbiani in volo — drawBirds()</h3>
+<p>7 gabbiani con parametri fissi (hardcoded) per garantire animazione deterministica:</p>
+<pre>float[][] BIRDS = {
+    {cicloMs, frazioneY_rispetto_orizzonte, sfasamento_0..1, scalaDimensione},
+    {28000f,  0.65f, 0.00f, 1.00f},  // gabbiano 1: ciclo 28 s
+    {35000f,  0.73f, 0.35f, 1.35f},  // gabbiano 2: ciclo 35 s
+    ...
+};</pre>
+<p>La posizione X è <code>progress = (now + phaseOffset) % cycle / cycle</code> → il gabbiano scorre da sinistra a destra e ricomincia. Tutti le ali battono in sincronia (<code>flapDip = |sin(now % 1600ms * PI)|</code>), simulando un banco.</p>
+
+<h3>5.5 Foglie — drawLeaves()</h3>
+<p>Le foglie si muovono con velocità e rotazione proporzionali all'intensità del vento:</p>
+
+<table>
+  <tr><th>Condizione</th><th>Numero foglie</th><th>Velocità px/s</th></tr>
+  <tr><td><span class="wbadge stormy">STORMY</span></td><td>12–20</td><td>95</td></tr>
+  <tr><td><span class="wbadge windy">WINDY</span></td><td>7–12</td><td>58</td></tr>
+  <tr><td><span class="wbadge rainy">RAINY</span></td><td>3–7</td><td>30</td></tr>
+  <tr><td><span class="wbadge clear">CLEAR</span></td><td>1–4</td><td>16</td></tr>
+</table>
+
+<p>Ogni foglia ha posizione di partenza casuale (seed orario), velocità (x,y) e velocità di rotazione individuali. La posizione attuale è <code>x0 + vx * (now % cycle / 1000)</code>. Le foglie sono scalate in base alla posizione verticale: più grandi in basso (vicino allo spettatore), più piccole in alto (lontane).</p>
+
+<h3>5.6 Stelle — drawStars()</h3>
+<p>30–50 stelle in posizioni fisse (seed orario). Il 28% "brilluccica" con un periodo individuale (2–5.5 s) e una fase casuale: <code>bright = base * (0.3 + 0.7 * |sin(now/period * PI + phase)|)</code>. Il 12% sono stelle "grandi" con un bagliore a croce.</p>
+
+<!-- ═══════════════════════════ 6 ═══════════════════════════ -->
+<h2 class="pb">6. Effetto vetro dell'800</h2>
+
+<h3>6.1 Distorsione delle onde — applyGlassDistortion()</h3>
+<p>Operazione pixel-per-pixel: ogni pixel della bitmap risultante viene campionato da una posizione spostata nella bitmap sorgente. Lo spostamento è calcolato da una somma di onde sinusoidali a frequenze diverse, simulando le imperfezioni di un vetro soffiato a mano:</p>
+
+<pre>double dx = 3.2 * sin(y * 0.014 + 0.53) + 1.8 * cos(x * 0.011 + y * 0.007);
+double dy = 2.8 * cos(x * 0.013 + 1.21) + 1.6 * sin(y * 0.010 + x * 0.006);
+// Micro-turbolenza ad alta frequenza:
+double dx2 = 0.9 * sin(x * 0.048 + y * 0.031);
+double dy2 = 0.7 * cos(y * 0.042 + x * 0.022);</pre>
+
+<p>La funzione usa <code>getPixels()</code>/<code>setPixels()</code> in blocco per minimizzare le chiamate JNI. Per un widget tipico di 360×220 px: ~80.000 pixel, ~320.000 operazioni trigonometriche — eseguito in &lt;50 ms su hardware moderno.</p>
+
+<h3>6.2 Superficie del vetro — drawGlassSurface()</h3>
+<p>Quattro livelli sovrapposti dopo la distorsione:</p>
+<ol>
+  <li><strong>Tinta minerale</strong>: rettangolo verde-grigio semi-trasparente (<code>argb(20, 25, 70, 15)</code>) su tutta la superficie.</li>
+  <li><strong>Vignette</strong>: <code>RadialGradient</code> dal centro verso i bordi, nero con alpha 70.</li>
+  <li><strong>Riflesso superiore</strong>: gradiente lineare bianco→trasparente nell'10% superiore.</li>
+  <li><strong>Bolle d'aria</strong> (10 posizioni fisse): cerchi con bordo verde-grigio, riflesso interno bianco — simulano le bolle intrappolate nel vetro durante la fabbricazione.</li>
+  <li><strong>Striature di colata</strong> (3 path): linee cubiche verticali sottilissime, bianco con alpha 10–18 — simulano le striature da colata del vetro soffiato.</li>
+</ol>
+
+<!-- ═══════════════════════════ 7 ═══════════════════════════ -->
+<h2>7. Effetti sul vetro (pioggia, tinta)</h2>
+<p>Disegnati <em>dopo</em> la distorsione: appaiono nitidi, come se fossero fisicamente depositati sul vetro.</p>
+
+<h3>7.1 Pioggia sul vetro — drawRainOnGlass()</h3>
+<p>Tre layer sovrapposti più una tinta wet:</p>
+
+<table>
+  <tr><th>Layer</th><th>Elementi</th><th>Effetto</th></tr>
+  <tr><td>Tinta wet</td><td>Rettangolo pieno</td><td>Overlay blu-grigio argb(20, 85, 120, 160) su tutto</td></tr>
+  <tr><td>Lontano</td><td>40 tratti</td><td>Alpha 28, spessore 0.5 px, brevi (10–48 px scalati)</td></tr>
+  <tr><td>Medio</td><td>22 tratti</td><td>Alpha 44, spessore 0.9 px, più lunghi (28–88 px)</td></tr>
+  <tr><td>Vicino</td><td>14 gocce</td><td>Lacrime con highlight bianco + streak che cola sotto</td></tr>
+</table>
+
+<p>L'angolo è fisso a 7° (vento sul vetro). Il seed cambia con <code>now</code> direttamente → la pioggia si muove visibilmente ogni 2 s.</p>
+
+<!-- ═══════════════════════════ 8 ═══════════════════════════ -->
+<h2 class="pb">8. Ora e data</h2>
+<p>Disegnati per ultimi, sempre in primo piano, <em>mai</em> distortie dal vetro:</p>
+<ul>
+  <li><strong>Ora</strong>: font sans-serif bold, dimensione 30% dell'altezza del widget, ombra morbida, centrata.</li>
+  <li><strong>Data</strong>: font normal, 13% dell'altezza, spaziatura lettere larga, centrata sotto l'ora.</li>
+  <li>Formato data in italiano: <code>Lun  5 Gen</code> (giorno abbreviato + numero + mese abbreviato).</li>
+</ul>
+
+<!-- ═══════════════════════════ 9 ═══════════════════════════ -->
+<h2>9. Cornice in legno — drawWindowFrame()</h2>
+<p>Quattro barre di spessore <code>t = min(w,h) * 0.085</code> con gradiente lineare che simula il legno invecchiato (marrone chiaro → scuro). Dettagli:</p>
+<ul>
+  <li><strong>Grana del legno</strong>: linee sottili orizzontali e verticali ogni 5.5 px, bianco con alpha 22.</li>
+  <li><strong>Effetto 3D</strong>: bordo interno superiore/sinistro chiaro, inferiore/destro scuro.</li>
+  <li><strong>Ombra proiettata</strong>: gradiente scuro verso l'interno del vetro.</li>
+  <li><strong>Blocchi agli angoli</strong>: quadrati più scuri.</li>
+  <li><strong>Chiodini</strong>: 4 cerchi nei pressi degli angoli, dorati semi-trasparenti.</li>
+</ul>
+
+<!-- ═══════════════════════════ 10 ═══════════════════════════ -->
+<h2 class="pb">10. Sistema di animazione — RenderService</h2>
+
+<h3>10.1 Perché un Service</h3>
+<p>Un AppWidget è una Bitmap statica: senza un processo attivo che la rigeneri periodicamente, non ci può essere animazione. Android mette a disposizione <code>AlarmManager</code> (minimo ~1 minuto con <code>setInexactRepeating</code>) o un <strong>foreground Service</strong> con un <code>Handler</code> interno per aggiornamenti più frequenti.</p>
+
+<h3>10.2 RenderService</h3>
+<pre>handler.postDelayed(tick, 2000L);  // ogni 2 secondi
+
+Runnable tick = () -> {
+    SeaWidget.updateAllWidgets(context);  // → WidgetRenderer.render()
+    handler.postDelayed(this, 2000L);
+};</pre>
+
+<p>Poiché è un foreground Service, deve mostrare una notifica persistente (obbligatoria da Android 8, API 26). La notifica è a priorità minima (IMPORTANCE_MIN) e praticamente invisibile.</p>
+
+<h3>10.3 Robustezza</h3>
+<ul>
+  <li>Il servizio usa <code>START_STICKY</code>: Android lo riavvia se viene terminato.</li>
+  <li>Il tick del meteo (<code>ACTION_WEATHER_TICK</code>, ogni minuto) chiama anche <code>RenderService.start()</code> come fallback: se il servizio è stato killato da battery optimization, riparte entro 60 s.</li>
+  <li>Il <code>BootReceiver</code> riavvia il servizio dopo ogni reboot.</li>
+</ul>
+
+<h3>10.4 Seed temporali</h3>
+
+<table>
+  <tr><th>Variabile</th><th>Formula</th><th>Cambia ogni</th><th>Usata per</th></tr>
+  <tr><td><code>now</code></td><td><code>currentTimeMillis()</code></td><td>Ogni render (2 s)</td><td>Posizione uccelli, pioggia, stelle, foglie</td></tr>
+  <tr><td><code>timeSeed</code></td><td><code>now / 60000</code></td><td>1 minuto</td><td>Sfondo (onde, fase glow)</td></tr>
+  <tr><td><code>hourSeed</code></td><td><code>now / 3600000</code></td><td>1 ora</td><td>Posizioni fisse sparkles/stelle/foglie</td></tr>
+</table>
+
+<!-- ═══════════════════════════ 11 ═══════════════════════════ -->
+<h2 class="pb">11. Meteo — WeatherManager e WeatherUpdateService</h2>
+
+<h3>11.1 Condizioni meteo</h3>
+<table>
+  <tr><th>Enum</th><th>Codici OWM</th><th>Effetti abilitati</th></tr>
+  <tr><td><span class="wbadge clear">CLEAR</span></td><td>800</td><td>Sole, uccelli, sparkles, foglie (poche)</td></tr>
+  <tr><td><span class="wbadge cloudy">CLOUDY</span></td><td>801–804, 600–799</td><td>Cielo desaturato, foglie medie</td></tr>
+  <tr><td><span class="wbadge rainy">RAINY</span></td><td>300–599</td><td>Pioggia 3-layer, ripples, vetro bagnato, foglie</td></tr>
+  <tr><td><span class="wbadge stormy">STORMY</span></td><td>200–299</td><td>Come RAINY, pioggia intensa, cielo scuro, no glow</td></tr>
+  <tr><td><span class="wbadge windy">WINDY</span></td><td>CLEAR/CLOUDY + vento &gt; 8 m/s</td><td>Cielo parziale, foglie abbondanti</td></tr>
+</table>
+
+<h3>11.2 Flusso di aggiornamento meteo</h3>
+<div class="pipeline">
+AlarmManager (ogni 60 s)<br/>
+&nbsp;&nbsp;→ SeaWidget.onReceive(ACTION_WEATHER_TICK)<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;→ WeatherUpdateService.onHandleIntent()<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ HTTP GET api.openweathermap.org/data/2.5/weather<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ parse JSON (weather.id, wind.speed)<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ WeatherManager.saveCondition() → SharedPreferences<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;→ SeaWidget.updateAllWidgets()
+</div>
+
+<h3>11.3 Test override</h3>
+<p>Un intero <code>weather_test_override</code> nelle SharedPreferences (−1 = nessuno, 0–4 = condizione) permette di forzare la condizione senza aspettare il meteo reale. <code>WeatherManager.getCondition()</code> legge prima questo valore.</p>
+
+<!-- ═══════════════════════════ 12 ═══════════════════════════ -->
+<h2>12. Configurazione e test effetti</h2>
+<p>La <code>ConfigActivity</code> si apre toccando il widget. Permette di:</p>
+<ul>
+  <li>Inserire manualmente la città (fetch meteo per nome)</li>
+  <li>Rilevare e salvare la posizione GPS (fetch per lat/lon)</li>
+  <li>Modificare la chiave API OpenWeatherMap</li>
+  <li>Forzare istantaneamente una condizione meteo per testare gli effetti</li>
+</ul>
+
+<p>I pulsanti di test (Sereno / Nuvoloso / Ventoso / Pioggia / Temporale / Meteo reale) aggiornano l'override e chiamano immediatamente <code>updateAllWidgets()</code>: il widget cambia aspetto in meno di 2 secondi.</p>
+
+<!-- ═══════════════════════════ 13 ═══════════════════════════ -->
+<h2 class="pb">13. File sorgente</h2>
+
+<table>
+  <tr><th>File</th><th>Righe</th><th>Funzione</th></tr>
+  <tr><td><code>WidgetRenderer.java</code></td><td>~850</td><td>Intera pipeline grafica</td></tr>
+  <tr><td><code>SeaWidget.java</code></td><td>~120</td><td>AppWidgetProvider, scheduling</td></tr>
+  <tr><td><code>RenderService.java</code></td><td>~100</td><td>Foreground service, tick 2 s</td></tr>
+  <tr><td><code>WeatherUpdateService.java</code></td><td>~90</td><td>Fetch HTTP meteo</td></tr>
+  <tr><td><code>WeatherManager.java</code></td><td>~60</td><td>Gestione condizione + override test</td></tr>
+  <tr><td><code>ConfigActivity.java</code></td><td>~140</td><td>UI configurazione e test</td></tr>
+  <tr><td><code>BootReceiver.java</code></td><td>~15</td><td>Restart su boot</td></tr>
+  <tr><td><code>build.sh</code></td><td>~80</td><td>Build manuale (aapt→javac→dx→zip→sign)</td></tr>
+  <tr><td><code>AndroidManifest.xml</code></td><td>~50</td><td>Dichiarazione componenti e permessi</td></tr>
+  <tr><td><code>activity_config.xml</code></td><td>~190</td><td>Layout configurazione</td></tr>
+  <tr><td><code>widget_layout.xml</code></td><td>~10</td><td>Layout widget (solo ImageView)</td></tr>
+</table>
+
+<div class="note"><strong>Dipendenze esterne:</strong> nessuna. Tutto il rendering usa unicamente le API del framework Android standard (android.graphics.Canvas, Bitmap, Paint, Path, LinearGradient, RadialGradient). Non è usato nessun engine grafico, libreria di animazione o framework di terze parti.</div>
+
+<br/><br/>
+<p style="text-align:center; color:#90a8c0; font-size:9pt;">WEA Widget — documentazione generata automaticamente — branch <code>claude/android-glass-widget-VKGIS</code></p>
+
+</body>
+</html>
