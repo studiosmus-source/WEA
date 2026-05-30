@@ -69,14 +69,12 @@ public class WidgetRenderer {
         long hourSeed = now / (3600L * 1000);
         float horizonY = h * 0.45f;
 
-        // ── TEST: sfondo bianco neutro per vedere solo gli effetti meteo ────────
-        Bitmap rawPhoto = null; // foto disabilitata temporaneamente
+        // ── TEST: sfondo bianco puro — zero scene, solo effetti vetro/pioggia ──
+        Bitmap rawPhoto = null;
         Bitmap base = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-        new Canvas(base).drawColor(0xFFE8EDF2); // grigio-azzurro chiaro
-        addSceneEffects(base, false, w, h, horizonY, time, atmo, hourSeed, now);
+        new Canvas(base).drawColor(0xFFDDE8F0); // azzurro chiaro uniforme
 
         Bitmap distorted = applyGlassDistortion(base, w, h);
-        // base kept alive: used as clean scene source for lens-drop sampling
 
         Canvas canvas = new Canvas(distorted);
         drawGlassSurface(canvas, w, h);
