@@ -927,63 +927,83 @@ public class WidgetRenderer {
 
     private static void drawLensDrop(Canvas c, Bitmap src,
                                       float cx, float cy, float r, float alpha) {
-        // Teardrop: wider at bottom (gravity), narrow at top
-        RectF oval = new RectF(cx - r * 0.65f, cy - r * 0.95f,
-                               cx + r * 0.65f, cy + r * 0.65f);
+        RectF oval = new RectF(cx - r * 0.62f, cy - r * 0.95f,
+                               cx + r * 0.62f, cy + r * 0.65f);
         Path shape = new Path();
         shape.addOval(oval, Path.Direction.CW);
 
         c.save();
         c.clipPath(shape);
 
-        // Sample scene — small margin = magnification effect
-        float margin = Math.max(r * 0.50f, 6f);
-        int sx = (int) Math.max(0, cx - margin);
-        int sy = (int) Math.max(0, cy - margin);
-        int sw = (int) Math.min(src.getWidth()  - sx, (int)(margin * 2));
-        int sh = (int) Math.min(src.getHeight() - sy, (int)(margin * 2));
-
-        if (sw > 2 && sh > 2) {
-            Bitmap sub = Bitmap.createBitmap(src, sx, sy, sw, sh);
-            float sc = (r * 1.30f) / Math.max(sw, 1);
-            Matrix mat = new Matrix();
-            mat.setScale(sc, -sc);             // negative Y = lens inversion
-            mat.postTranslate(cx - sw * sc * 0.5f, cy + sh * sc * 0.5f);
-            Paint bp = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-            bp.setAlpha((int) Math.min(255f, alpha));
-            c.drawBitmap(sub, mat, bp);
-            sub.recycle();
+        boolean drewScene = false;
+        if (src != null) {
+            float margin = Math.max(r * 0.55f, 8f);
+            int sx = (int) Math.max(0, cx - margin);
+            int sy = (int) Math.max(0, cy - margin);
+            int sw = (int) Math.min(src.getWidth()  - sx, (int)(margin * 2));
+            int sh = (int) Math.min(src.getHeight() - sy, (int)(margin * 2));
+            if (sw > 4 && sh > 4) {
+                Bitmap sub = Bitmap.createBitmap(src, sx, sy, sw, sh);
+                float sc = (r * 1.24f) / Math.max(sw, 1);
+                Matrix mat = new Matrix();
+                mat.setScale(sc, -sc);   // flip Y = optical inversion
+                mat.postTranslate(cx - sw * sc * 0.5f, cy + sh * sc * 0.5f);
+                // Brighten interior so inversion is visible against dark background
+                ColorMatrix bm = new ColorMatrix();
+                bm.setScale(1.6f, 1.6f, 1.6f, 1f);
+                Paint bp = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+                bp.setColorFilter(new ColorMatrixColorFilter(bm));
+                c.drawBitmap(sub, mat, bp);
+                sub.recycle();
+                drewScene = true;
+            }
+        }
+        if (!drewScene) {
+            // Fallback: frosted glass fill
+            Paint fp = new Paint(Paint.ANTI_ALIAS_FLAG);
+            fp.setShader(new RadialGradient(cx, cy - r * 0.2f, r * 1.3f,
+                new int[]{Color.argb(220, 245, 250, 255),
+                          Color.argb(140, 200, 220, 255),
+                          Color.argb(70,  155, 185, 230)},
+                new float[]{0f, 0.45f, 1f}, Shader.TileMode.CLAMP));
+            c.drawOval(oval, fp);
         }
 
         c.restore();
 
         Paint ov = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-        // Subtle water-blue tint
-        ov.setColor(Color.argb((int)(alpha * 0.14f), 70, 115, 195));
+        // Blue-white water tint
+        ov.setColor(Color.argb(60, 180, 210, 255));
         c.drawOval(oval, ov);
 
-        // Dark rim — refractive index boundary, the most realistic touch
+        // Dark refractive rim — most realistic cue
         ov.setStyle(Paint.Style.STROKE);
-        ov.setStrokeWidth(Math.max(1.2f, r * 0.06f));
-        ov.setColor(Color.argb((int)(alpha * 0.55f), 18, 25, 45));
+        ov.setStrokeWidth(Math.max(1.8f, r * 0.09f));
+        ov.setColor(Color.argb(200, 12, 18, 38));
         c.drawOval(oval, ov);
         ov.setStyle(Paint.Style.FILL);
 
-        // Primary specular — large bright ellipse, upper-left
-        ov.setColor(Color.argb((int) Math.min(255f, alpha * 0.95f), 255, 255, 255));
-        c.drawOval(cx - r * 0.45f, cy - r * 0.85f,
-                   cx + r * 0.05f, cy - r * 0.22f, ov);
+        // Primary specular — large bright ellipse upper-left
+        ov.setColor(Color.argb(240, 255, 255, 255));
+        c.drawOval(cx - r * 0.44f, cy - r * 0.84f,
+                   cx + r * 0.04f, cy - r * 0.22f, ov);
+        // Secondary specular — small upper-right
+        ov.setColor(Color.argb(140, 255, 255, 255));
+        c.drawOval(cx + r * 0.08f, cy - r * 0.66f,
+                   cx + r * 0.30f, cy - r * 0.38f, ov);
 
-        // Secondary specular — small, upper-right
-        ov.setColor(Color.argb((int) Math.min(255f, alpha * 0.45f), 255, 255, 255));
-        c.drawOval(cx + r * 0.10f, cy - r * 0.68f,
-                   cx + r * 0.34f, cy - r * 0.38f, ov);
+        // Thin rain trail below the drop (makes it read as rain-on-glass)
+        ov.setStyle(Paint.Style.STROKE);
+        ov.setStrokeWidth(Math.max(0.8f, r * 0.10f));
+        ov.setColor(Color.argb(90, 180, 210, 255));
+        c.drawLine(cx, cy + r * 0.65f, cx, cy + r * 2.2f, ov);
+        ov.setStyle(Paint.Style.FILL);
 
-        // Shadow cast below the drop
-        ov.setColor(Color.argb((int)(alpha * 0.18f), 0, 4, 22));
-        c.drawOval(cx - r * 0.52f, cy + r * 0.48f,
-                   cx + r * 0.52f, cy + r * 0.72f, ov);
+        // Drop shadow
+        ov.setColor(Color.argb(40, 0, 5, 25));
+        c.drawOval(cx - r * 0.50f, cy + r * 0.55f,
+                   cx + r * 0.50f, cy + r * 0.80f, ov);
     }
 
     // Computes smooth continuous y-position for a glass drop.
