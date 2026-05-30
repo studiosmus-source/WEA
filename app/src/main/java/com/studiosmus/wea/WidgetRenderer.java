@@ -53,7 +53,7 @@ public class WidgetRenderer {
         // 5. Rain on glass
         if (weather == WeatherManager.Condition.RAINY
                 || weather == WeatherManager.Condition.STORMY) {
-            drawRainOnGlass(canvas, w, h, timeSeed);
+            drawRainOnGlass(canvas, w, h, now);
         }
 
         // 6. Time / date — always crisp
@@ -388,6 +388,71 @@ public class WidgetRenderer {
         rp.setShader(null);
     }
 
+    // ── Rain falling in the scene (behind glass, before distortion) ──────────
+
+    private static void drawRainInScene(Canvas c, int w, int h, float horizonY,
+                                         WeatherManager.Condition weather, long now) {
+        boolean stormy = weather == WeatherManager.Condition.STORMY;
+        float dx = (float) Math.tan(Math.toRadians(stormy ? 18.0 : 7.0));
+        Random rnd = new Random(now / 150L);
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        p.setStyle(Paint.Style.STROKE);
+        p.setStrokeCap(Paint.Cap.ROUND);
+
+        // Far layer — in sky, very subtle
+        p.setColor(Color.argb(10, 160, 180, 215));
+        p.setStrokeWidth(0.4f);
+        int skyN = stormy ? 32 : 20;
+        for (int i = 0; i < skyN; i++) {
+            float x = rnd.nextFloat() * w;
+            float y0 = rnd.nextFloat() * horizonY;
+            float ln = (12 + rnd.nextFloat() * 28) * (h / 400f);
+            c.drawLine(x, y0, x + dx * ln, y0 + ln, p);
+        }
+
+        // Sea layer — slightly more visible, perspective-scaled near viewer
+        p.setColor(Color.argb(16, 145, 175, 215));
+        p.setStrokeWidth(0.55f);
+        int seaN = stormy ? 28 : 16;
+        for (int i = 0; i < seaN; i++) {
+            float x   = rnd.nextFloat() * w;
+            float y0  = horizonY + rnd.nextFloat() * (h - horizonY);
+            float dist = (y0 - horizonY) / (h - horizonY);
+            float ln  = (22 + rnd.nextFloat() * 55) * (0.5f + dist * 0.5f) * (h / 400f);
+            c.drawLine(x, y0, x + dx * ln, y0 + ln, p);
+        }
+    }
+
+    // ── Rain-impact ripples on the water surface ──────────────────────────────
+
+    private static void drawRainRipples(Canvas c, int w, int h, float horizonY,
+                                         WeatherManager.Condition weather, long now) {
+        boolean stormy = weather == WeatherManager.Condition.STORMY;
+        Random rnd = new Random(now / 250L + 13);
+        Paint ep = new Paint(Paint.ANTI_ALIAS_FLAG);
+        ep.setStyle(Paint.Style.STROKE);
+
+        int count = stormy ? 24 : 13;
+        for (int i = 0; i < count; i++) {
+            float x    = rnd.nextFloat() * w;
+            float y    = horizonY + rnd.nextFloat() * (h - horizonY) * 0.88f;
+            float dist = (y - horizonY) / (h - horizonY);
+            float rx   = (2.5f + rnd.nextFloat() * 5f) * (0.3f + dist * 0.7f) * (w / 300f);
+            float ry   = rx * (0.22f + dist * 0.10f);
+
+            // Each ripple expands over ~600 ms with a random phase offset
+            long phaseOff = (long)(rnd.nextFloat() * 600L);
+            float expand  = (float)((now + phaseOff) % 600L) / 600f;
+            float rExp    = rx * (0.25f + expand * 0.75f);
+            float ryExp   = ry * (0.25f + expand * 0.75f);
+            int   alpha   = (int)((1f - expand) * (stormy ? 32 : 22));
+
+            ep.setColor(Color.argb(alpha, 180, 205, 225));
+            ep.setStrokeWidth(0.5f + dist * 0.4f);
+            c.drawOval(x - rExp, y - ryExp, x + rExp, y + ryExp, ep);
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     //  SCENE EFFECTS (drawn before glass)
     // ═══════════════════════════════════════════════════════════════════════
@@ -398,6 +463,13 @@ public class WidgetRenderer {
                                          long hourSeed, long now) {
         Canvas c = new Canvas(bmp);
         boolean isDay = time != TimeOfDay.NIGHT && time != TimeOfDay.DUSK;
+
+        // Rain in the scene — before glass, contributes to distorted view
+        if (weather == WeatherManager.Condition.RAINY
+                || weather == WeatherManager.Condition.STORMY) {
+            drawRainInScene(c, w, h, horizonY, weather, now);
+            drawRainRipples(c, w, h, horizonY, weather, now);
+        }
 
         if (weather == WeatherManager.Condition.CLEAR && isDay) {
             drawWaterSparkles(c, w, h, horizonY, hourSeed, now);
@@ -531,7 +603,9 @@ public class WidgetRenderer {
             float lx    = ((x0 + vx * t) % (w + 120) + w + 120) % (w + 120) - 40;
             float ly    = ((y0 + vy * t) % (h + 120) + h + 120) % (h + 120) - 40;
             float angle = ang0 + rot * t;
-            drawSingleLeaf(c, lx, ly, size, angle, colors[rnd.nextInt(colors.length)]);
+            // Depth: leaves lower in frame are closer → appear larger
+            float depthSize = size * (0.40f + 0.90f * Math.max(0f, ly / h));
+            drawSingleLeaf(c, lx, ly, depthSize, angle, colors[rnd.nextInt(colors.length)]);
         }
     }
 
@@ -667,27 +741,57 @@ public class WidgetRenderer {
 
     // ── Rain on glass ─────────────────────────────────────────────────────────
 
-    private static void drawRainOnGlass(Canvas c, int w, int h, long seed) {
-        Random rnd=new Random(seed);
-        Paint dp=new Paint(Paint.ANTI_ALIAS_FLAG);
-        for (int i=0;i<18;i++) {
-            float x=rnd.nextFloat()*w,y=rnd.nextFloat()*h;
-            float r=(2f+rnd.nextFloat()*5f)*(w/240f);
-            dp.setStyle(Paint.Style.FILL);
-            dp.setColor(Color.argb(70,180,210,240));
-            c.drawOval(x-r*0.55f,y-r,x+r*0.55f,y+r*0.35f,dp);
-            dp.setColor(Color.argb(110,255,255,255));
-            c.drawOval(x-r*0.28f,y-r*0.80f,x+r*0.05f,y-r*0.20f,dp);
+    private static void drawRainOnGlass(Canvas c, int w, int h, long now) {
+        // Wet-glass tint
+        Paint wt = new Paint();
+        wt.setColor(Color.argb(20, 85, 120, 160));
+        c.drawRect(0, 0, w, h, wt);
+
+        float dx  = (float) Math.tan(Math.toRadians(7.0)); // slight wind angle on glass
+        Random rnd = new Random(now);
+
+        // ─── Far layer: many thin short streaks ──────────────────────────────
+        Paint fp = new Paint(Paint.ANTI_ALIAS_FLAG);
+        fp.setStyle(Paint.Style.STROKE);
+        fp.setStrokeCap(Paint.Cap.ROUND);
+        fp.setColor(Color.argb(28, 170, 210, 255));
+        fp.setStrokeWidth(0.5f);
+        for (int i = 0; i < 40; i++) {
+            float x  = rnd.nextFloat() * w;
+            float y0 = rnd.nextFloat() * h * 0.85f;
+            float ln = (10 + rnd.nextFloat() * 48) * (h / 400f);
+            c.drawLine(x, y0, x + dx * ln, y0 + ln, fp);
         }
-        Paint sp=new Paint(Paint.ANTI_ALIAS_FLAG);
-        sp.setStyle(Paint.Style.STROKE); sp.setColor(Color.argb(50,180,210,255));
-        for (int i=0;i<22;i++) {
-            float x=rnd.nextFloat()*w,y0=rnd.nextFloat()*h*0.7f;
-            float len=(15+rnd.nextFloat()*90)*(h/400f);
-            sp.setStrokeWidth(0.7f+rnd.nextFloat()*1.4f);
-            Path s=new Path(); s.moveTo(x,y0);
-            s.lineTo(x+rnd.nextFloat()*5-2.5f,y0+len);
-            c.drawPath(s,sp);
+
+        // ─── Medium layer ─────────────────────────────────────────────────────
+        fp.setColor(Color.argb(44, 155, 200, 250));
+        fp.setStrokeWidth(0.9f);
+        for (int i = 0; i < 22; i++) {
+            float x  = rnd.nextFloat() * w;
+            float y0 = rnd.nextFloat() * h * 0.90f;
+            float ln = (28 + rnd.nextFloat() * 88) * (h / 400f);
+            c.drawLine(x, y0, x + dx * ln, y0 + ln, fp);
+        }
+
+        // ─── Near layer: teardrops with trailing streaks ─────────────────────
+        Paint dp = new Paint(Paint.ANTI_ALIAS_FLAG);
+        for (int i = 0; i < 14; i++) {
+            float x = rnd.nextFloat() * w;
+            float y = rnd.nextFloat() * h;
+            float r = (2.5f + rnd.nextFloat() * 5.5f) * (w / 240f);
+
+            dp.setStyle(Paint.Style.FILL);
+            dp.setColor(Color.argb(68, 175, 210, 250));
+            c.drawOval(x - r * 0.55f, y - r, x + r * 0.55f, y + r * 0.40f, dp);
+            dp.setColor(Color.argb(105, 255, 255, 255));
+            c.drawOval(x - r * 0.28f, y - r * 0.80f, x + r * 0.05f, y - r * 0.22f, dp);
+
+            // Streak trailing below each drop
+            dp.setStyle(Paint.Style.STROKE);
+            dp.setStrokeWidth(0.8f);
+            dp.setColor(Color.argb(38, 155, 200, 245));
+            float strkLen = r * (2.5f + rnd.nextFloat() * 3.0f);
+            c.drawLine(x, y + r * 0.4f, x + dx * strkLen, y + r * 0.4f + strkLen, dp);
         }
     }
 
