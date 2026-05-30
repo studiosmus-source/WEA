@@ -84,7 +84,12 @@ public class WidgetRenderer {
         float scale = Math.max((float) dstW / srcW, (float) dstH / srcH);
         int sW = (int)(srcW * scale), sH = (int)(srcH * scale);
         Bitmap sc = Bitmap.createScaledBitmap(src, sW, sH, true);
-        Bitmap cr = Bitmap.createBitmap(sc, (sW - dstW)/2, (sH - dstH)/2, dstW, dstH);
+        // Shift crop toward upper-right: more sky and sea, less foreground buildings
+        int offX = (int)((sW - dstW) * 0.62f);  // right side → sea visible
+        int offY = (int)((sH - dstH) * 0.12f);  // near top    → sky visible
+        offX = Math.max(0, Math.min(offX, sW - dstW));
+        offY = Math.max(0, Math.min(offY, sH - dstH));
+        Bitmap cr = Bitmap.createBitmap(sc, offX, offY, dstW, dstH);
         if (sc != src) sc.recycle();
         return cr;
     }
@@ -143,7 +148,7 @@ public class WidgetRenderer {
             default: break;
         }
 
-        long timeSeed = System.currentTimeMillis() / (10L * 60 * 1000);
+        long timeSeed = System.currentTimeMillis() / (5L * 60 * 1000); // changes every 5 min
 
         // Water sparkles (CLEAR, daytime — no sun ball, just glints on water)
         if (weather == WeatherManager.Condition.CLEAR
