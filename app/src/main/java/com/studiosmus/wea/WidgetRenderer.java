@@ -56,7 +56,7 @@ public class WidgetRenderer {
         long now      = System.currentTimeMillis();
         long timeSeed = now / (60L   * 1000);
         long hourSeed = now / (3600L * 1000);
-        float horizonY = h * 0.52f;
+        float horizonY = h * 0.45f;
 
         Bitmap base = generateSeaSky(w, h, horizonY, time, atmo, timeSeed);
         addSceneEffects(base, w, h, horizonY, time, atmo, hourSeed, now);
@@ -365,6 +365,10 @@ public class WidgetRenderer {
         Canvas c = new Canvas(bmp);
         boolean isDay = time != TimeOfDay.NIGHT && time != TimeOfDay.DUSK;
 
+        drawRockyCliff(c, w, h, horizonY, time, atmo);
+        if (atmo.cloud < 0.8f && isDay) {
+            drawSmallBoats(c, w, horizonY, time);
+        }
         if (atmo.rain > 0.1f) {
             drawRainInScene(c, w, h, horizonY, atmo, now);
             drawRainRipples(c, w, h, horizonY, atmo, now);
@@ -731,54 +735,236 @@ public class WidgetRenderer {
         c.drawText(dateStr, (w-dw)/2f, h*0.56f+h*0.165f, dp);
     }
 
+    // ─── Rocky cliff (Ligurian coast, right side) ────────────────────────────
+
+    private static void drawRockyCliff(Canvas c, int w, int h, float horizonY,
+                                        TimeOfDay time, Atmo atmo) {
+        int base;
+        switch (time) {
+            case DAWN:   base = Color.argb(200, 45, 22, 15); break;
+            case NIGHT:  base = Color.argb(200, 18, 14, 12); break;
+            case SUNSET: base = Color.argb(200, 65, 28, 10); break;
+            case DUSK:   base = Color.argb(200, 30, 20, 18); break;
+            default:     base = Color.argb(200, 78, 68, 52); break;
+        }
+        base = scaleAlpha(base, 1.0f - atmo.fog * 0.62f);
+
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        p.setStyle(Paint.Style.FILL);
+        p.setColor(base);
+
+        // Main cliff silhouette
+        Path cliff = new Path();
+        cliff.moveTo(w * 0.58f, horizonY);
+        cliff.cubicTo(w*0.66f, horizonY - h*0.07f, w*0.74f, horizonY - h*0.17f, w*0.80f, horizonY - h*0.13f);
+        cliff.cubicTo(w*0.87f, horizonY - h*0.09f, w*0.92f, horizonY - h*0.20f, w, horizonY - h*0.10f);
+        cliff.lineTo(w, h);
+        cliff.lineTo(w * 0.58f, h);
+        cliff.close();
+        c.drawPath(cliff, p);
+
+        // Rock strata lines (lighter bands)
+        Paint lp = new Paint(Paint.ANTI_ALIAS_FLAG);
+        lp.setStyle(Paint.Style.STROKE);
+        lp.setStrokeWidth(0.8f);
+        lp.setColor(Color.argb(55, 160, 145, 105));
+        c.drawLine(w*0.68f, horizonY + h*0.02f, w*0.87f, h*0.82f, lp);
+        c.drawLine(w*0.80f, horizonY - h*0.02f, w*0.96f, h*0.72f, lp);
+        // Dark crevice
+        lp.setColor(Color.argb(70, 10, 8, 5));
+        lp.setStrokeWidth(1.2f);
+        c.drawLine(w*0.73f, horizonY - h*0.06f, w*0.90f, h*0.60f, lp);
+        // Headland rock at waterline
+        p.setColor(scaleAlpha(base, 0.8f));
+        Path rock = new Path();
+        rock.moveTo(w*0.58f, horizonY);
+        rock.cubicTo(w*0.52f, horizonY + h*0.04f, w*0.48f, horizonY + h*0.06f, w*0.42f, horizonY + h*0.05f);
+        rock.cubicTo(w*0.44f, horizonY + h*0.02f, w*0.52f, horizonY, w*0.58f, horizonY);
+        rock.close();
+        c.drawPath(rock, p);
+    }
+
+    // ─── Small boats near horizon ────────────────────────────────────────────
+
+    private static void drawSmallBoats(Canvas c, int w, float horizonY, TimeOfDay time) {
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        // Two boats, left of centre (clear of the cliff)
+        float[][] boats = {{0.20f, 0.55f, 1.0f}, {0.40f, 0.40f, 0.65f}};
+        for (float[] b : boats) {
+            float bx = b[0] * w;
+            float by = horizonY - b[1] * horizonY * 0.06f;
+            float bw = b[2] * w * 0.020f;
+            float bh = bw * 0.38f;
+            // Hull
+            p.setStyle(Paint.Style.FILL);
+            p.setColor(Color.argb(170, 235, 230, 220));
+            c.drawOval(bx - bw, by, bx + bw, by + bh, p);
+            // Mast
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(0.6f);
+            p.setColor(Color.argb(150, 190, 185, 172));
+            c.drawLine(bx, by, bx, by - bh * 2.8f, p);
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
-    //  WINDOW FRAME
+    //  STONE ARCH WINDOW FRAME (Porto Venere loggia)
     // ═══════════════════════════════════════════════════════════════════════
 
     private static void drawWindowFrame(Canvas c, int w, int h) {
-        float t = Math.min(w,h)*0.085f;
-        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        p.setColor(Color.argb(160,10,8,5));
-        c.drawRect(0,0,w,2.5f,p); c.drawRect(0,h-2.5f,w,h,p);
-        c.drawRect(0,0,2.5f,h,p); c.drawRect(w-2.5f,0,w,h,p);
-        p.setShader(new LinearGradient(0,0,0,t,
-                Color.argb(255,120,82,42),Color.argb(255,72,46,20),Shader.TileMode.CLAMP));
-        c.drawRect(0,0,w,t,p);
-        p.setShader(new LinearGradient(0,h-t,0,h,
-                Color.argb(255,60,38,16),Color.argb(255,90,60,28),Shader.TileMode.CLAMP));
-        c.drawRect(0,h-t,w,h,p);
-        p.setShader(new LinearGradient(0,0,t,0,
-                Color.argb(255,110,74,36),Color.argb(255,68,44,18),Shader.TileMode.CLAMP));
-        c.drawRect(0,0,t,h,p);
-        p.setShader(new LinearGradient(w-t,0,w,0,
-                Color.argb(255,62,40,18),Color.argb(255,95,62,30),Shader.TileMode.CLAMP));
-        c.drawRect(w-t,0,w,h,p); p.setShader(null);
-        Paint gp = new Paint(); gp.setColor(Color.argb(22,200,150,80)); gp.setStrokeWidth(0.8f);
-        for (float y=3f; y<t-2; y+=5.5f) {
-            c.drawLine(t,y,w-t,y,gp); c.drawLine(t,h-y,w-t,h-y,gp);
+        float pw    = w * 0.090f;   // side pillar width
+        float cw    = w * 0.042f;   // central column width
+        float ph    = h * 0.080f;   // parapet height
+        float topH  = h * 0.018f;   // thin stone band at top
+        float archW = (w - 2 * pw - cw) / 2f;
+        float archR = Math.min(archW / 2f, (h - topH - ph) * 0.46f);
+        float springY   = topH + archR;
+        float openBottom = h - ph;
+
+        float lx0 = pw, lx1 = pw + archW;
+        float rx0 = pw + archW + cw, rx1 = w - pw;
+
+        // ── Stone mask (EVEN_ODD carves arch openings) ───────────────────────
+        Path mask = new Path();
+        mask.setFillType(Path.FillType.EVEN_ODD);
+        mask.addRect(0, 0, w, h, Path.Direction.CW);
+        addArchCutout(mask, lx0, lx1, springY, archR, openBottom, topH);
+        addArchCutout(mask, rx0, rx1, springY, archR, openBottom, topH);
+
+        Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+        // Warm limestone base, top→bottom
+        fill.setShader(new LinearGradient(0, 0, 0, h,
+                0xFFD2CCBA, 0xFF9C968A, Shader.TileMode.CLAMP));
+        c.drawPath(mask, fill);
+        fill.setShader(null);
+
+        // Left→right shadow variation
+        fill.setShader(new LinearGradient(0, 0, w, 0,
+                Color.argb(18, 255, 248, 230), Color.argb(42, 18, 12, 4),
+                Shader.TileMode.CLAMP));
+        c.drawPath(mask, fill);
+        fill.setShader(null);
+
+        // ── Stone texture ─────────────────────────────────────────────────────
+        c.save();
+        c.clipPath(mask);
+        Paint tx = new Paint();
+        tx.setStyle(Paint.Style.STROKE);
+        tx.setStrokeWidth(0.5f);
+        tx.setColor(Color.argb(16, 45, 35, 20));
+        Random rnd = new Random(77331L);
+        for (int i = 0; i < 95; i++) {
+            float x1 = rnd.nextFloat() * w;
+            float y1 = rnd.nextFloat() * h;
+            c.drawLine(x1, y1, x1 + (rnd.nextFloat()-0.5f)*30, y1 + (rnd.nextFloat()-0.5f)*7, tx);
         }
-        for (float x=3f; x<t-2; x+=5.5f) {
-            c.drawLine(x,t,x,h-t,gp); c.drawLine(w-x,t,w-x,h-t,gp);
+        // Horizontal mortar joints
+        tx.setStrokeWidth(1.0f);
+        tx.setColor(Color.argb(20, 35, 28, 15));
+        for (float y = topH + h*0.10f; y < h; y += h * 0.115f) {
+            c.drawLine(0, y, w, y + (rnd.nextFloat()-0.5f) * 3, tx);
         }
-        Paint bp = new Paint(Paint.ANTI_ALIAS_FLAG);
-        bp.setStyle(Paint.Style.STROKE); bp.setStrokeWidth(1.8f);
-        bp.setColor(Color.argb(120,200,160,100));
-        c.drawLine(t,t,w-t,t,bp); c.drawLine(t,t,t,h-t,bp);
-        bp.setColor(Color.argb(140,20,12,5));
-        c.drawLine(t,h-t,w-t,h-t,bp); c.drawLine(w-t,t,w-t,h-t,bp);
-        p.setShader(new LinearGradient(0,0,0,t*1.4f,
-                Color.argb(80,0,0,0),Color.TRANSPARENT,Shader.TileMode.CLAMP));
-        c.drawRect(t,t,w-t,t*2.4f,p);
-        p.setShader(new LinearGradient(0,h-t*1.4f,0,h-t,
-                Color.TRANSPARENT,Color.argb(70,0,0,0),Shader.TileMode.CLAMP));
-        c.drawRect(t,h-t*2.4f,w-t,h-t,p); p.setShader(null);
-        p.setColor(Color.argb(255,55,35,14));
-        c.drawRect(0,0,t,t,p); c.drawRect(w-t,0,w,t,p);
-        c.drawRect(0,h-t,t,h,p); c.drawRect(w-t,h-t,w,h,p);
-        Paint cp = new Paint(Paint.ANTI_ALIAS_FLAG); cp.setColor(Color.argb(80,180,140,80));
-        float nr=t*0.22f, no=t*0.50f;
-        c.drawCircle(no,no,nr,cp); c.drawCircle(w-no,no,nr,cp);
-        c.drawCircle(no,h-no,nr,cp); c.drawCircle(w-no,h-no,nr,cp);
+        // Lichen / moss patches
+        tx.setStyle(Paint.Style.FILL);
+        for (int i = 0; i < 22; i++) {
+            float bx = rnd.nextFloat() * w, by = rnd.nextFloat() * h;
+            float br = 2f + rnd.nextFloat() * 8f;
+            tx.setColor((i % 3 == 0) ? Color.argb(38, 62, 82, 42) : Color.argb(22, 88, 88, 68));
+            c.drawCircle(bx, by, br, tx);
+        }
+        c.restore();
+
+        // ── Arch moldings ─────────────────────────────────────────────────────
+        drawArchMolding(c, lx0, lx1, springY, archR, openBottom, topH);
+        drawArchMolding(c, rx0, rx1, springY, archR, openBottom, topH);
+
+        // ── Central column ────────────────────────────────────────────────────
+        float colX = lx1;
+        fill.setShader(new LinearGradient(colX, 0, colX + cw, 0,
+                0xFFD8D2C2, 0xFF908A7A, Shader.TileMode.CLAMP));
+        c.drawRect(colX, springY, colX + cw, openBottom, fill);
+        fill.setShader(null);
+        // Capital (wider top)
+        float capE = cw * 0.28f;
+        fill.setColor(0xFFBCB8A8);
+        c.drawRect(colX - capE, springY - cw*0.50f, colX + cw + capE, springY + cw*0.38f, fill);
+        // Base
+        c.drawRect(colX - capE, openBottom - cw*0.38f, colX + cw + capE, openBottom, fill);
+        // Highlight line on column
+        fill.setStyle(Paint.Style.STROKE); fill.setStrokeWidth(1.4f);
+        fill.setColor(Color.argb(50, 225, 218, 205));
+        c.drawLine(colX + cw*0.22f, springY + cw*0.4f, colX + cw*0.22f, openBottom - cw*0.4f, fill);
+        fill.setStyle(Paint.Style.FILL);
+
+        // ── Parapet ───────────────────────────────────────────────────────────
+        fill.setShader(new LinearGradient(0, h - ph, 0, h,
+                0xFF9C9688, 0xFFBCB6A8, Shader.TileMode.CLAMP));
+        c.drawRect(0, h - ph, w, h, fill);
+        fill.setShader(null);
+        fill.setStyle(Paint.Style.STROKE); fill.setStrokeWidth(1.5f);
+        fill.setColor(Color.argb(85, 218, 212, 196));
+        c.drawLine(0, h - ph, w, h - ph, fill);
+        fill.setStyle(Paint.Style.FILL);
+
+        // ── Depth shadows at arch edges ───────────────────────────────────────
+        for (float[] arch : new float[][]{{lx0, lx1}, {rx0, rx1}}) {
+            float ax0 = arch[0], ax1 = arch[1];
+            float sw = pw * 0.35f;
+            fill.setShader(new LinearGradient(ax0, 0, ax0 + sw, 0,
+                    Color.argb(60, 0, 0, 0), Color.TRANSPARENT, Shader.TileMode.CLAMP));
+            c.drawRect(ax0, topH, ax0 + sw, openBottom, fill);
+            fill.setShader(null);
+            fill.setShader(new LinearGradient(ax1, 0, ax1 - sw, 0,
+                    Color.argb(60, 0, 0, 0), Color.TRANSPARENT, Shader.TileMode.CLAMP));
+            c.drawRect(ax1 - sw, topH, ax1, openBottom, fill);
+            fill.setShader(null);
+        }
+    }
+
+    // Carves an arch-shaped opening into a EVEN_ODD path.
+    private static void addArchCutout(Path p, float x0, float x1, float springY, float archR,
+                                       float bottom, float topH) {
+        android.graphics.RectF oval = new android.graphics.RectF(x0, topH, x1, topH + 2 * archR);
+        p.moveTo(x0, bottom);
+        p.lineTo(x1, bottom);
+        p.lineTo(x1, springY);
+        p.arcTo(oval, 0, -180, false); // right→top→left (over the arch)
+        p.lineTo(x0, bottom);
+        p.close();
+    }
+
+    // Draws shadow rim and highlight along the inner arch edge.
+    private static void drawArchMolding(Canvas c, float x0, float x1, float springY, float archR,
+                                         float bottom, float topH) {
+        android.graphics.RectF oval = new android.graphics.RectF(x0, topH, x1, topH + 2 * archR);
+        Paint mp = new Paint(Paint.ANTI_ALIAS_FLAG);
+        mp.setStyle(Paint.Style.STROKE);
+
+        // Shadow rim (inner edge of stone wall, depth cue)
+        mp.setStrokeWidth(Math.max(3f, (x1 - x0) * 0.022f));
+        mp.setColor(Color.argb(70, 18, 14, 8));
+        Path rim = new Path();
+        rim.moveTo(x0, bottom);
+        rim.lineTo(x0, springY);
+        rim.arcTo(oval, 180, 180, false); // left→top→right
+        rim.lineTo(x1, bottom);
+        c.drawPath(rim, mp);
+
+        // Crown highlight (sunlight from upper-right)
+        mp.setStrokeWidth(2.2f);
+        mp.setColor(Color.argb(52, 242, 235, 215));
+        Path crown = new Path();
+        crown.arcTo(oval, 240, 85, true);
+        c.drawPath(crown, mp);
+
+        // Left vertical inner edge (lit side)
+        mp.setStrokeWidth(1.8f);
+        mp.setColor(Color.argb(38, 235, 228, 210));
+        c.drawLine(x0, springY, x0, bottom, mp);
+        // Right vertical inner edge (shadow)
+        mp.setColor(Color.argb(45, 10, 8, 5));
+        c.drawLine(x1, springY, x1, bottom, mp);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
