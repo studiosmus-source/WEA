@@ -100,10 +100,6 @@ public class WidgetRenderer {
         }
 
         drawTimeDate(canvas, w, h);
-        // Photo already has the stone loggia — procedural arch only for fallback
-        if (rawPhoto == null) {
-            drawWindowFrame(canvas, w, h);
-        }
         return distorted;
     }
 
