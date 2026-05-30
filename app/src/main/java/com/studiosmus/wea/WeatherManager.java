@@ -6,7 +6,7 @@ import android.preference.PreferenceManager;
 
 public class WeatherManager {
 
-    public enum Condition { CLEAR, CLOUDY, RAINY, STORMY }
+    public enum Condition { CLEAR, CLOUDY, RAINY, STORMY, WINDY }
 
     private static final long MAX_AGE_MS = 60L * 60 * 1000; // 1 hour
 
@@ -46,6 +46,7 @@ public class WeatherManager {
             case 1: return Condition.CLOUDY;
             case 2: return Condition.RAINY;
             case 3: return Condition.STORMY;
+            case 4: return Condition.WINDY;
             default: return Condition.CLEAR;
         }
     }

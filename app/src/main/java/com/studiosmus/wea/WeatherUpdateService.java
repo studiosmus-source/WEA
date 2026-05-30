@@ -26,17 +26,25 @@ public class WeatherUpdateService extends IntentService {
     protected void onHandleIntent(Intent intent) {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
         String apiKey = prefs.getString("api_key", "5d65637a72e3b61f42e8223cdf07a228");
-        String city   = prefs.getString("city", "");
 
-        if (apiKey.isEmpty() || city.isEmpty()) return;
+        boolean hasGps = prefs.getBoolean("has_gps", false);
+        float lat = prefs.getFloat("gps_lat", 0f);
+        float lon = prefs.getFloat("gps_lon", 0f);
+        String city = prefs.getString("city", "");
+
+        if (!hasGps && city.isEmpty()) return;
 
         try {
-            String encodedCity = URLEncoder.encode(city, "UTF-8");
-            URL url = new URL(
-                "https://api.openweathermap.org/data/2.5/weather?q="
-                + encodedCity + "&appid=" + apiKey + "&units=metric");
+            String endpoint;
+            if (hasGps) {
+                endpoint = "https://api.openweathermap.org/data/2.5/weather?lat="
+                        + lat + "&lon=" + lon + "&appid=" + apiKey + "&units=metric";
+            } else {
+                endpoint = "https://api.openweathermap.org/data/2.5/weather?q="
+                        + URLEncoder.encode(city, "UTF-8") + "&appid=" + apiKey + "&units=metric";
+            }
 
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            HttpURLConnection conn = (HttpURLConnection) new URL(endpoint).openConnection();
             conn.setConnectTimeout(12000);
             conn.setReadTimeout(12000);
             conn.setRequestProperty("Accept", "application/json");
@@ -50,11 +58,24 @@ public class WeatherUpdateService extends IntentService {
                 reader.close();
 
                 JSONObject json = new JSONObject(sb.toString());
-                JSONArray weatherArr = json.getJSONArray("weather");
-                int condId = weatherArr.getJSONObject(0).getInt("id");
+                int condId = json.getJSONArray("weather")
+                        .getJSONObject(0).getInt("id");
+
+                double windSpeed = 0;
+                if (json.has("wind")) {
+                    windSpeed = json.getJSONObject("wind").optDouble("speed", 0);
+                }
 
                 WeatherManager.Condition cond =
                         WeatherManager.fromIndex(WeatherManager.mapFromOWMId(condId));
+
+                // Upgrade to WINDY if strong wind and not already severe
+                if ((cond == WeatherManager.Condition.CLEAR
+                        || cond == WeatherManager.Condition.CLOUDY)
+                        && windSpeed > 8.0) {
+                    cond = WeatherManager.Condition.WINDY;
+                }
+
                 WeatherManager.saveCondition(this, cond);
             }
             conn.disconnect();
@@ -62,7 +83,6 @@ public class WeatherUpdateService extends IntentService {
             // keep old data on failure
         }
 
-        // Trigger widget redraw after weather update
         AppWidgetManager mgr = AppWidgetManager.getInstance(this);
         int[] ids = mgr.getAppWidgetIds(new ComponentName(this, SeaWidget.class));
         for (int id : ids) {

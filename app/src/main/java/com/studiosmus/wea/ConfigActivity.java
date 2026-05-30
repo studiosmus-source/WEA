@@ -1,9 +1,14 @@
 package com.studiosmus.wea;
 
+import android.Manifest;
 import android.app.Activity;
 import android.appwidget.AppWidgetManager;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.location.Location;
+import android.location.LocationManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.view.View;
@@ -13,6 +18,7 @@ import android.widget.TextView;
 
 public class ConfigActivity extends Activity {
 
+    private static final int REQ_LOCATION = 1001;
     private int widgetId = AppWidgetManager.INVALID_APPWIDGET_ID;
 
     @Override
@@ -20,63 +26,51 @@ public class ConfigActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_config);
 
-        // Detect if launched as widget configurator
-        Intent intent = getIntent();
-        Bundle extras = intent.getExtras();
+        Bundle extras = getIntent().getExtras();
         if (extras != null) {
-            widgetId = extras.getInt(
-                    AppWidgetManager.EXTRA_APPWIDGET_ID,
+            widgetId = extras.getInt(AppWidgetManager.EXTRA_APPWIDGET_ID,
                     AppWidgetManager.INVALID_APPWIDGET_ID);
         }
-
-        // If launched as configurator and user presses back → cancel
         if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-            Intent cancelResult = new Intent();
-            cancelResult.putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId);
-            setResult(RESULT_CANCELED, cancelResult);
+            Intent cancel = new Intent();
+            cancel.putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId);
+            setResult(RESULT_CANCELED, cancel);
         }
 
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
-        EditText cityEdit   = (EditText) findViewById(R.id.edit_city);
-        EditText apiKeyEdit = (EditText) findViewById(R.id.edit_apikey);
-        final TextView status = (TextView) findViewById(R.id.txt_status);
+        ((EditText) findViewById(R.id.edit_city)).setText(prefs.getString("city", ""));
+        ((EditText) findViewById(R.id.edit_apikey)).setText(
+                prefs.getString("api_key", "5d65637a72e3b61f42e8223cdf07a228"));
 
-        // Pre-fill saved values (default key pre-populated)
-        cityEdit.setText(prefs.getString("city", ""));
-        apiKeyEdit.setText(prefs.getString("api_key", "5d65637a72e3b61f42e8223cdf07a228"));
+        boolean hasGps = prefs.getBoolean("has_gps", false);
+        if (hasGps) {
+            float lat = prefs.getFloat("gps_lat", 0f);
+            float lon = prefs.getFloat("gps_lon", 0f);
+            setStatus(String.format("GPS: %.4f, %.4f", lat, lon));
+        }
 
-        Button save = (Button) findViewById(R.id.btn_save);
-        save.setOnClickListener(new View.OnClickListener() {
+        ((Button) findViewById(R.id.btn_gps)).setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { requestGps(); }
+        });
+
+        ((Button) findViewById(R.id.btn_save)).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                EditText ce = (EditText) findViewById(R.id.edit_city);
-                EditText ae = (EditText) findViewById(R.id.edit_apikey);
-                String city   = ce.getText().toString().trim();
-                String apiKey = ae.getText().toString().trim();
+                String city   = ((EditText) findViewById(R.id.edit_city)).getText().toString().trim();
+                String apiKey = ((EditText) findViewById(R.id.edit_apikey)).getText().toString().trim();
 
-                if (city.isEmpty() || apiKey.isEmpty()) {
-                    ((TextView) findViewById(R.id.txt_status))
-                            .setText(getString(R.string.status_empty));
+                if (apiKey.isEmpty()) {
+                    setStatus(getString(R.string.status_empty));
                     return;
                 }
 
-                SharedPreferences p = PreferenceManager.getDefaultSharedPreferences(
-                        ConfigActivity.this);
-                p.edit()
-                 .putString("city",    city)
-                 .putString("api_key", apiKey)
-                 .apply();
+                SharedPreferences p = PreferenceManager.getDefaultSharedPreferences(ConfigActivity.this);
+                p.edit().putString("city", city).putString("api_key", apiKey).apply();
 
-                // Trigger immediate weather fetch
-                Intent si = new Intent(ConfigActivity.this, WeatherUpdateService.class);
-                startService(si);
-
-                // Also update widget immediately with current data
+                startService(new Intent(ConfigActivity.this, WeatherUpdateService.class));
                 SeaWidget.updateAllWidgets(ConfigActivity.this);
+                setStatus(getString(R.string.status_saved));
 
-                status.setText(getString(R.string.status_saved));
-
-                // Return OK if we were launched as configurator
                 if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                     Intent result = new Intent();
                     result.putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId);
@@ -85,5 +79,57 @@ public class ConfigActivity extends Activity {
                 }
             }
         });
+    }
+
+    private void requestGps() {
+        if (Build.VERSION.SDK_INT >= 23 &&
+                checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                        != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(
+                    new String[]{Manifest.permission.ACCESS_FINE_LOCATION,
+                                 Manifest.permission.ACCESS_COARSE_LOCATION},
+                    REQ_LOCATION);
+        } else {
+            saveGpsLocation();
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
+        if (requestCode == REQ_LOCATION && results.length > 0
+                && results[0] == PackageManager.PERMISSION_GRANTED) {
+            saveGpsLocation();
+        } else {
+            setStatus("Permesso GPS negato.");
+        }
+    }
+
+    private void saveGpsLocation() {
+        try {
+            LocationManager lm = (LocationManager) getSystemService(LOCATION_SERVICE);
+            Location loc = null;
+            try { loc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER); } catch (SecurityException ignored) {}
+            if (loc == null) {
+                try { loc = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER); } catch (SecurityException ignored) {}
+            }
+            if (loc != null) {
+                PreferenceManager.getDefaultSharedPreferences(this).edit()
+                        .putBoolean("has_gps", true)
+                        .putFloat("gps_lat", (float) loc.getLatitude())
+                        .putFloat("gps_lon", (float) loc.getLongitude())
+                        .apply();
+                setStatus(String.format("GPS salvato: %.4f, %.4f",
+                        loc.getLatitude(), loc.getLongitude()));
+                startService(new Intent(this, WeatherUpdateService.class));
+            } else {
+                setStatus("Posizione GPS non disponibile. Usa la città.");
+            }
+        } catch (Exception e) {
+            setStatus("Errore GPS: " + e.getMessage());
+        }
+    }
+
+    private void setStatus(String msg) {
+        ((TextView) findViewById(R.id.txt_status)).setText(msg);
     }
 }

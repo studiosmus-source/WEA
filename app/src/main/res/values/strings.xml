@@ -11,5 +11,5 @@
     <string name="apikey_info">Ottieni una chiave gratuita su openweathermap.org (piano Free, 60 chiamate/min)</string>
     <string name="btn_save">Salva e aggiorna widget</string>
     <string name="status_saved">Salvato. Widget aggiornato.</string>
-    <string name="status_empty">Inserisci città e chiave API.</string>
+    <string name="status_empty">Inserisci la chiave API.</string>
 </resources>

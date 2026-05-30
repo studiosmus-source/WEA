@@ -75,6 +75,16 @@
             android:layout_marginBottom="32dp"/>
 
         <Button
+            android:id="@+id/btn_gps"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Usa posizione GPS"
+            android:textColor="#FFFFFF"
+            android:background="#1A4060"
+            android:padding="14dp"
+            android:layout_marginBottom="12dp"/>
+
+        <Button
             android:id="@+id/btn_save"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
