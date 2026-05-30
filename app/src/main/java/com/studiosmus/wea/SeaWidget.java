@@ -37,9 +37,10 @@ public class SeaWidget extends AppWidgetProvider {
     public void onReceive(Context ctx, Intent intent) {
         super.onReceive(ctx, intent);
         if (ACTION_WEATHER_TICK.equals(intent.getAction())) {
-            // AlarmManager tick → start background weather fetch
+            // AlarmManager tick → fetch weather + ensure render loop is alive
             Intent si = new Intent(ctx, WeatherUpdateService.class);
             ctx.startService(si);
+            RenderService.start(ctx); // restart if it was killed
         }
     }
 
